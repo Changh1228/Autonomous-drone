@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import math
 from numpy import linalg as LA
+from os import listdir
 
-imgOri = cv2.imread('images_mine/2019-02-20-183626.jpg')  # RGB space imput image
+imgOri = cv2.imread('images_mine/2019-02-20-182819.jpg')  # RGB space imput image
 
 # ------------------Filter--------------------------------------------------- #
 img = cv2.bilateralFilter(imgOri, 10, 75, 75)
@@ -21,6 +22,69 @@ contours = h[0]
 # cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
 
 index = 0 # where we keep count of the valid shapes found
+
+def match_template(type, candidate):
+    """
+    :param type: String stating kind of sign. Possible values: 'rectangle','triangle','circle'
+    :param candidate: The wraped image of the sign after being cropped from the original image
+    :return: the name of the sign, i.e: dangerous_curve_left
+    """
+    threshold = 0
+    sift = cv2.xfeatures2d.SIFT_create()
+    kp_1, desc_1 = sift.detectAndCompute(candidate, None)
+    if type=='triangle':
+        for file in listdir('templates/triangle/'):
+            image = cv2.imread('templates/triangle/' + file)
+            resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
+            kp_2, desc_2 = sift.detectAndCompute(image, None)
+            index_params = dict(algorithm=0, trees=5)
+            search_params = dict()
+            flann = cv2.FlannBasedMatcher(index_params, search_params)
+            matches = flann.knnMatch(desc_1, desc_2, k=2)
+            good_points = 0
+            ratio = 0.6
+            for m, n in matches:
+                if m.distance < ratio * n.distance:
+                    good_points = good_points + 1
+            if (good_points > threshold):
+                threshold = good_points
+                idx = file
+    if type=='rectangle':
+        for file in listdir('templates/rectangle/'):
+            image = cv2.imread('templates/rectangle/' + file)
+            resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
+            kp_2, desc_2 = sift.detectAndCompute(image, None)
+            index_params = dict(algorithm=0, trees=5)
+            search_params = dict()
+            flann = cv2.FlannBasedMatcher(index_params, search_params)
+            matches = flann.knnMatch(desc_1, desc_2, k=2)
+            good_points = 0
+            ratio = 0.6
+            for m, n in matches:
+                if m.distance < ratio * n.distance:
+                    good_points = good_points + 1
+            if (good_points > threshold):
+                threshold = good_points
+                idx = file
+    if type=='circle':
+        for file in listdir('templates/circle/'):
+            image = cv2.imread('templates/circle/' + file)
+            resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
+            kp_2, desc_2 = sift.detectAndCompute(image, None)
+            index_params = dict(algorithm=0, trees=5)
+            search_params = dict()
+            flann = cv2.FlannBasedMatcher(index_params, search_params)
+            matches = flann.knnMatch(desc_1, desc_2, k=2)
+            good_points = 0
+            ratio = 0.6
+            for m, n in matches:
+                if m.distance < ratio * n.distance:
+                    good_points = good_points + 1
+            if (good_points > threshold):
+                threshold = good_points
+                idx = file
+    return idx
+
 def transform_tri(image, vector1, vector2, other_vec):
     """
     :param image: The image we work with
@@ -30,7 +94,7 @@ def transform_tri(image, vector1, vector2, other_vec):
     quadrilater
     :return:
     """
-    global index;
+    global index
 
     # Add some margins to the found vertex in order to transform better the triangle
     if (other_vec[0][0] < vector1[0][0]):
@@ -75,7 +139,9 @@ def transform_tri(image, vector1, vector2, other_vec):
 
     M = cv2.getPerspectiveTransform(box, dst)
     warped = cv2.warpPerspective(image, M, (60, int(round(30 * np.sqrt(3)))))
-    cv2.imwrite(''+str(index)+'triangle.jpg', warped)
+    type = match_template("triangle", warped)
+
+    cv2.imwrite('results/triangle/'+str(index)+'triangle.jpg', warped)
     index = index+1
 
 
@@ -106,7 +172,7 @@ def order_points(pts):
     return rect
 
 def transform_rect(image, vertexs):
-    global index;
+    global index
     # obtain a consistent order of the points and unpack them
     # individually
     rect = order_points(vertexs)
@@ -140,11 +206,12 @@ def transform_rect(image, vertexs):
     # compute the perspective transform matrix and then apply it
     M = cv2.getPerspectiveTransform(rect, dst)
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
-    cv2.imwrite(''+str(index)+'rectangle.jpg', warped)
+    type = match_template("rectangle", warped)
+    cv2.imwrite('results/rectangle/'+str(index)+'rectangle.jpg', warped)
     index = index+1
 
 def transform_circle(image, vertexs):
-    global index;
+    global index
     # obtain a consistent order of the points and unpack them
     # individually
     rect = order_points(vertexs)
@@ -184,7 +251,8 @@ def transform_circle(image, vertexs):
     # compute the perspective transform matrix and then apply it
     M = cv2.getPerspectiveTransform(rect, dst)
     warped = cv2.warpPerspective(image, M, (len_square, len_square)) # the result should be a cercle inside a square
-    cv2.imwrite(''+str(index)+'circle.jpg', warped)
+    type = match_template("circle", warped)
+    cv2.imwrite('results/circle/'+str(index)+'circle.jpg', warped)
     index = index+1
 
 
@@ -210,10 +278,10 @@ def detectTri(cnt, triCnt):
                 break
         if flag == 0:
             triCnt.extend([[approx, (cx, cy)]])  # save approx Polygon and center
-            cv2.drawContours(img, cnt, -1, (0, 255, 0), 1)
+            #cv2.drawContours(img, cnt, -1, (0, 255, 0), 1)
             x, y, w, h = cv2.boundingRect(cnt)
-            cv2.rectangle(img, (x-5, y-5), (x+w+5, y+h+5), (0, 255, 0), 1)
-            cv2.putText(img, 'tri', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            #cv2.rectangle(img, (x-5, y-5), (x+w+5, y+h+5), (0, 255, 0), 1)
+            #cv2.putText(img, 'tri', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             idx = 10 # some random value
             max_norm = -999999999
             vector = [approx[0][0] - approx[1][0], approx[0][0] - approx[2][0], approx[1][0] - approx[2][0]] # 3 vectors
