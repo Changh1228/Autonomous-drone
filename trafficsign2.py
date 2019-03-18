@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import math
 
-imgOri = cv2.imread('test_img\\cir12.jpg')  # RGB space imput image
+imgOri = cv2.imread('test_img\\cir3.jpg')  # RGB space imput image
 
 # ------------------Filter--------------------------------------------------- #
 img = cv2.bilateralFilter(imgOri, 10, 75, 75)
@@ -16,12 +16,10 @@ gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 binaryImg = cv2.Canny(gray, 100, 250)
 h = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 contours = h[0]
-# Test #
-# cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
 
 
 def detectTri(cnt, triCnt):
-    # -------- Polygon detection ------------------------ #
+    # -------- Polygon detection -------------------------------------------- #
     epsilon = 0.05 * cv2.arcLength(cnt, True)
     approx = cv2.approxPolyDP(cnt, epsilon, True)
     # Analyse shape
@@ -40,7 +38,7 @@ def detectTri(cnt, triCnt):
             if k < 20:
                 flag = 1
                 break
-        # ------------- detect color in contour ------------- #
+        # ------------- detect color in contour ------------------------------ #
         # make contour mask
         cntMask = np.zeros((480, 640), np.uint8)
         fillCnt = []
@@ -60,7 +58,7 @@ def detectTri(cnt, triCnt):
         prop = np.sum(redMask) / np.sum(cntMask)  # cal proportion of expected color
         if prop < 0.7:
             flag = 1
-        # ---------- draw and save ROI ---------------------- #
+        # ---------- draw and save ROI --------------------------------------- #
         if flag == 0:
             triCnt.extend([[approx, (cx, cy)]])  # save approx Polygon and center
             x, y, w, h = cv2.boundingRect(cnt)
@@ -71,7 +69,7 @@ def detectTri(cnt, triCnt):
 
 
 def detectRect(cnt, rectCnt):
-    # -------- Polygon detection ------------------------ #
+    # -------- Polygon detection --------------------------------------------- #
     # (!!! repeat code, probably add tri and rect in same func)
     epsilon = 0.05 * cv2.arcLength(cnt, True)
     approx = cv2.approxPolyDP(cnt, epsilon, True)
@@ -91,7 +89,7 @@ def detectRect(cnt, rectCnt):
             if k < 20:
                 flag = 1
                 break
-        # ------------- detect color in contour ------------- #
+        # ------------- detect color in contour --------------------------- #
         # make contour mask
         cntMask = np.zeros((480, 640), np.uint8)
         fillCnt = []
@@ -107,7 +105,7 @@ def detectRect(cnt, rectCnt):
         if prop < 0.7:
             flag = 1
 
-        # ---------- draw and save ROI ---------------------- #
+        # ---------- draw and save ROI ------------------------------------- #
         if flag == 0:
             rectCnt.extend([[approx, (cx, cy)]])  # save approx Polygon and center
             cv2.drawContours(img, cnt, -1, (255, 255, 0), 2)
@@ -130,57 +128,73 @@ def detectCir(cnt, cirCnt):
         cx = int(mm['m10'] / mm['m00'])
         cy = int(mm['m01'] / mm['m00'])
         flag = 0
-        for center in cirCnt:
-            k = np.square(center[0][0] - cx) + np.square(center[0][1] - cy)
-            if k < 20:
-                flag = 1
+        # 0: need more check;
+        # 1: bule circle;
+        # 2: red and blue circle;
+        # 3: red and yellow circle;
+        # 4: not interested circle;
+
+        for species in cirCnt:  # check every kind circle
+            for center in species:  # check repeat contour
+                k = np.square(center[0][0] - cx) + np.square(center[0][1] - cy)
+                if k < 20:
+                    flag = 4
+                    break
+            if flag == 4:
                 break
+
         # detect outliers(center of contour should close to ellipse)
         d = np.square(ell[0][0] - cx) + np.square(ell[0][1] - cy)
         if d > 20:
-            flag = 1
+            flag = 4
 
-        # ------------- detect color in contour ------------- #
-        # make contour mask
-        cntMask = np.zeros((480, 640), np.uint8)
-        fillCnt = []
-        fillCnt.append(cnt)
-        cv2.drawContours(cntMask, fillCnt, -1, 255, -1)
-        res = cv2.bitwise_and(img, img, mask=cntMask)
-        hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
-        # Red and yellow mask
-        # Two edge of the Hue turnel
-        lower1 = np.array([160, 10, 100])
-        upper1 = np.array([180, 250, 250])
-        redMask1 = cv2.inRange(hsv, lower1, upper1)
-        lower2 = np.array([0, 10, 100])
-        upper2 = np.array([40, 240, 240])
-        redMask2 = cv2.inRange(hsv, lower2, upper2)
-        # Blue mask
-        lower = np.array([100, 50, 50])
-        upper = np.array([135, 240, 240])
-        buleMask = cv2.inRange(hsv, lower, upper)
+        if flag != 4:
+            # ------------- detect color in contour ------------------------------ #
+            # make contour mask
+            cntMask = np.zeros((480, 640), np.uint8)
+            fillCnt = []
+            fillCnt.append(cnt)
+            cv2.drawContours(cntMask, fillCnt, -1, 255, -1)  # fill contour with white
 
-        rybMask = redMask1 | redMask2 | buleMask
-        prop = np.sum(rybMask) / np.sum(cntMask)  # cal proportion of expected color
-        if prop < 0.7:
-            flag = 1
+            res = cv2.bitwise_and(img, img, mask=cntMask)
+            hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
+            # Red and yellow mask
+            # Two edge of the Hue turnel
+            lower1 = np.array([160, 10, 100])
+            upper1 = np.array([180, 250, 250])
+            redMask1 = cv2.inRange(hsv, lower1, upper1)
+            lower2 = np.array([0, 10, 100])
+            upper2 = np.array([40, 240, 240])
+            ryMask = cv2.inRange(hsv, lower2, upper2) | redMask1
 
-        # ---------- draw and save ROI ---------------------- #
-        if flag == 0:
-            cirCnt.extend([ell])
-            cv2.ellipse(img, ell, (0, 255, 255), 1)
-            cv2.drawContours(img, cnt, -1, (0, 255, 255), 2)
-            x = int(ell[0][0])
-            y = int(ell[0][1])
-            cv2.putText(img, 'cir', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+            # Blue mask
+            lower = np.array([100, 50, 50])
+            upper = np.array([135, 240, 240])
+            blueMask = cv2.inRange(hsv, lower, upper)
+            # classify base on color
+            blueProp = np.sum(blueMask) / np.sum(cntMask)
+            ryProP = np.sum(ryMask) / np.sum(cntMask)
+            if blueProp > 0.7:
+                flag = 1
+            elif (blueProp > 0.2) and (ryProP > 0.4):
+                flag = 2
+            elif ryProP > 0.7:
+                flag = 3
+            # ---------- draw and save ROI ---------------------------------------- #
+            if flag != 0:
+                cirCnt[flag-1].extend([ell])  # save ellipse center and size
+                cv2.ellipse(img, ell, (0, 255, 255), 1)
+                cv2.drawContours(img, cnt, -1, (0, 255, 255), 2)
+                x = int(ell[0][0])
+                y = int(ell[0][1])
+                cv2.putText(img, 'cir%d' % flag, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
     return cirCnt
 
 
-# ------------- Shape detection ------------------------------------------ #
+# ------------- Shape detection ------------------------------------------------ #
 triCnt = []
 rectCnt = []
-cirCnt = []
+cirCnt = [[], [], []]  # bule circle, red & yellow circle, red & bule circle
 for cnt in contours:
     triCnt = detectTri(cnt, triCnt)
     rectCnt = detectRect(cnt, rectCnt)
