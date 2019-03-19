@@ -1,29 +1,23 @@
 import cv2
 import numpy as np
 import math
-from numpy import linalg as LA
 from os import listdir
-
-imgOri = cv2.imread('images_mine/2019-02-20-182819.jpg')  # RGB space imput image
+# TODO: Put the directory of the image
+imgOri = cv2.imread('images_mine/2019-02-20-183908.jpg')  # RGB space imput image
 
 # ------------------Filter--------------------------------------------------- #
 img = cv2.bilateralFilter(imgOri, 10, 75, 75)
-# bilateral Filter (best quality, slow?)
-# img = cv2.GaussianBlur(imgOri, (5, 5), 0)  # Gaussian Filter
 
 # -------------- Find & Draw Contour ---------------------------------------- #
 gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 # two different thresh, canny has better result ( !!! maybe try other edge detection)
-# ret, thresh = cv2.threshold(gray, 127, 255, 0)
-binaryImg = cv2.Canny(gray, 100, 500)
-h = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-contours = h[0]
-# Test #
-# cv2.drawContours(img, contours, -1, (0, 255, 0), 1)
+thresh = 50
+binaryImg = cv2.Canny(gray, thresh, 3*thresh)
+contours = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[1] #modification to work in OpenCV 3.4
 
 index = 0 # where we keep count of the valid shapes found
 
-def match_template(type, candidate):
+def match_template(type, candidate, flag=5): # by default flag something random and just use it when cercle
     """
     :param type: String stating kind of sign. Possible values: 'rectangle','triangle','circle'
     :param candidate: The wraped image of the sign after being cropped from the original image
@@ -32,6 +26,7 @@ def match_template(type, candidate):
     threshold = 0
     sift = cv2.xfeatures2d.SIFT_create()
     kp_1, desc_1 = sift.detectAndCompute(candidate, None)
+    idx = "unsure"
     if type=='triangle':
         for file in listdir('templates/triangle/'):
             image = cv2.imread('templates/triangle/' + file)
@@ -42,13 +37,15 @@ def match_template(type, candidate):
             flann = cv2.FlannBasedMatcher(index_params, search_params)
             matches = flann.knnMatch(desc_1, desc_2, k=2)
             good_points = 0
-            ratio = 0.6
+            ratio = 0.5
             for m, n in matches:
                 if m.distance < ratio * n.distance:
                     good_points = good_points + 1
             if (good_points > threshold):
                 threshold = good_points
                 idx = file
+                if (threshold > 10):
+                    break
     if type=='rectangle':
         for file in listdir('templates/rectangle/'):
             image = cv2.imread('templates/rectangle/' + file)
@@ -66,23 +63,70 @@ def match_template(type, candidate):
             if (good_points > threshold):
                 threshold = good_points
                 idx = file
+                if (threshold > 10):
+                    break
     if type=='circle':
-        for file in listdir('templates/circle/'):
-            image = cv2.imread('templates/circle/' + file)
-            resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
-            kp_2, desc_2 = sift.detectAndCompute(image, None)
-            index_params = dict(algorithm=0, trees=5)
-            search_params = dict()
-            flann = cv2.FlannBasedMatcher(index_params, search_params)
-            matches = flann.knnMatch(desc_1, desc_2, k=2)
-            good_points = 0
-            ratio = 0.6
-            for m, n in matches:
-                if m.distance < ratio * n.distance:
-                    good_points = good_points + 1
-            if (good_points > threshold):
-                threshold = good_points
-                idx = file
+        # 1: blue circle;
+        # 2: red and blue circle;
+        # 3: red and yellow circle;
+        # 4: not interested circle;
+        if flag==1:
+            for file in listdir('templates/circle/blue/'):
+                image = cv2.imread('templates/circle/blue/' + file)
+                resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
+                kp_2, desc_2 = sift.detectAndCompute(image, None)
+                index_params = dict(algorithm=0, trees=5)
+                search_params = dict()
+                flann = cv2.FlannBasedMatcher(index_params, search_params)
+                matches = flann.knnMatch(desc_1, desc_2, k=2)
+                good_points = 0
+                ratio = 0.6
+                for m, n in matches:
+                    if m.distance < ratio * n.distance:
+                        good_points = good_points + 1
+                if (good_points > threshold):
+                    threshold = good_points
+                    idx = file
+                    if (threshold > 10):
+                        break
+        elif flag==2:
+            for file in listdir('templates/circle/red_blue/'):
+                image = cv2.imread('templates/circle/red_blue/' + file)
+                resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
+                kp_2, desc_2 = sift.detectAndCompute(image, None)
+                index_params = dict(algorithm=0, trees=5)
+                search_params = dict()
+                flann = cv2.FlannBasedMatcher(index_params, search_params)
+                matches = flann.knnMatch(desc_1, desc_2, k=2)
+                good_points = 0
+                ratio = 0.6
+                for m, n in matches:
+                    if m.distance < ratio * n.distance:
+                        good_points = good_points + 1
+                if (good_points > threshold):
+                    threshold = good_points
+                    idx = file
+                    if (threshold > 10):
+                        break
+        elif flag==3:
+            for file in listdir('templates/circle/red_yellow/'):
+                image = cv2.imread('templates/circle/red_yellow/' + file)
+                resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
+                kp_2, desc_2 = sift.detectAndCompute(image, None)
+                index_params = dict(algorithm=0, trees=5)
+                search_params = dict()
+                flann = cv2.FlannBasedMatcher(index_params, search_params)
+                matches = flann.knnMatch(desc_1, desc_2, k=2)
+                good_points = 0
+                ratio = 0.6
+                for m, n in matches:
+                    if m.distance < ratio * n.distance:
+                        good_points = good_points + 1
+                if (good_points > threshold):
+                    threshold = good_points
+                    idx = file
+                    if (threshold > 10):
+                        break
     return idx
 
 def transform_tri(image, vector1, vector2, other_vec):
@@ -94,7 +138,6 @@ def transform_tri(image, vector1, vector2, other_vec):
     quadrilater
     :return:
     """
-    global index
 
     # Add some margins to the found vertex in order to transform better the triangle
     if (other_vec[0][0] < vector1[0][0]):
@@ -139,10 +182,12 @@ def transform_tri(image, vector1, vector2, other_vec):
 
     M = cv2.getPerspectiveTransform(box, dst)
     warped = cv2.warpPerspective(image, M, (60, int(round(30 * np.sqrt(3)))))
-    type = match_template("triangle", warped)
-
     cv2.imwrite('results/triangle/'+str(index)+'triangle.jpg', warped)
-    index = index+1
+
+    type = match_template("triangle", warped) #returns the string saying to which template it belongs to, if none returns
+    # "unsure"
+    return type
+
 
 
 def order_points(pts):
@@ -210,7 +255,7 @@ def transform_rect(image, vertexs):
     cv2.imwrite('results/rectangle/'+str(index)+'rectangle.jpg', warped)
     index = index+1
 
-def transform_circle(image, vertexs):
+def transform_circle(image, vertexs, flag):
     global index
     # obtain a consistent order of the points and unpack them
     # individually
@@ -251,20 +296,24 @@ def transform_circle(image, vertexs):
     # compute the perspective transform matrix and then apply it
     M = cv2.getPerspectiveTransform(rect, dst)
     warped = cv2.warpPerspective(image, M, (len_square, len_square)) # the result should be a cercle inside a square
-    type = match_template("circle", warped)
+    type = match_template("circle", warped, flag)
     cv2.imwrite('results/circle/'+str(index)+'circle.jpg', warped)
     index = index+1
 
+    return type
+
 
 def detectTri(cnt, triCnt):
-    # Polygon approximation
-    epsilon = 0.05 * cv2.arcLength(cnt, True)
+    global index
+
+    # -------- Polygon detection -------------------------------------------- #
+    epsilon = 0.15 * cv2.arcLength(cnt, True)
     approx = cv2.approxPolyDP(cnt, epsilon, True)
     # Analyse shape
     corners = len(approx)
     # Calculate space
     S1 = cv2.contourArea(cnt)
-    if corners == 3 and S1 > 1000:
+    if corners == 3 and S1 > 100:
         # choose contour base on corner and space
         mm = cv2.moments(cnt)  # cal center
         cx = int(mm['m10'] / mm['m00'])
@@ -276,29 +325,42 @@ def detectTri(cnt, triCnt):
             if k < 20:
                 flag = 1
                 break
+        # ------------- detect color in contour ------------------------------ #
+        # make contour mask
+        cntMask = np.zeros((480, 640), np.uint8)
+        fillCnt = []
+        fillCnt.append(cnt)
+        cv2.drawContours(cntMask, fillCnt, -1, 255, -1)
+        res = cv2.bitwise_and(img, img, mask=cntMask)
+        hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
+        # Red and yellow mask
+        # Two edge of the Hue turnel
+        lower1 = np.array([160, 10, 100])
+        upper1 = np.array([180, 250, 250])
+        redMask1 = cv2.inRange(hsv, lower1, upper1)
+        lower2 = np.array([0, 10, 100])
+        upper2 = np.array([40, 240, 240])
+        redMask2 = cv2.inRange(hsv, lower2, upper2)
+        redMask = redMask1 | redMask2
+        prop = np.sum(redMask) / np.sum(cntMask)  # cal proportion of expected color
+        if prop < 0.7:
+            flag = 1
+                # ---------- draw and save ROI ---------------------- #
         if flag == 0:
-            triCnt.extend([[approx, (cx, cy)]])  # save approx Polygon and center
-            #cv2.drawContours(img, cnt, -1, (0, 255, 0), 1)
-            x, y, w, h = cv2.boundingRect(cnt)
-            #cv2.rectangle(img, (x-5, y-5), (x+w+5, y+h+5), (0, 255, 0), 1)
-            #cv2.putText(img, 'tri', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-            idx = 10 # some random value
-            max_norm = -999999999
-            vector = [approx[0][0] - approx[1][0], approx[0][0] - approx[2][0], approx[1][0] - approx[2][0]] # 3 vectors
-            for i in range(len(vector)):
-                if (LA.norm(vector[i])>max_norm):
-                    idx = i
-                    max_norm = LA.norm(vector[i])
-            if (idx == 1):
-                # two first vertex are the ones of longest, the last is the other vertex
-                transform_tri(img, approx[0], approx[2], approx[1])
-            elif (idx == 0):
-                transform_tri(img, approx[0], approx[1], approx[2])
+            type = transform_tri(img, approx[0], approx[2], approx[1])
+            if type != 'unsure':
+                triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
             else:
-                transform_tri(img,approx[1], approx[2], approx[0])
+                type = transform_tri(img, approx[0], approx[1], approx[2])
+                if type != 'unsure':
+                    triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
+                else:
+                    type = transform_tri(img, approx[1], approx[2], approx[0])
+                    triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
+            index = index + 1
     return triCnt
 
-
+"""
 def detectRect(cnt, rectCnt):
     # Polygon approximation (!!! repeat code, probably add tri and rect in same func)
     epsilon = 0.05 * cv2.arcLength(cnt, True)
@@ -307,7 +369,7 @@ def detectRect(cnt, rectCnt):
     corners = len(approx)
     # Calculate space
     S1 = cv2.contourArea(cnt)
-    if corners == 4 and S1 > 1000:
+    if corners == 4 and S1 > 150:
         # choose contour base on corner and space
         mm = cv2.moments(cnt)  # cal center
         cx = int(mm['m10'] / mm['m00'])
@@ -319,6 +381,23 @@ def detectRect(cnt, rectCnt):
             if k < 20:
                 flag = 1
                 break
+        # ------------- detect color in contour ------------- #
+        # make contour mask
+        cntMask = np.zeros((480, 640), np.uint8)
+        fillCnt = []
+        fillCnt.append(cnt)
+        cv2.drawContours(cntMask, fillCnt, -1, 255, -1)
+        res = cv2.bitwise_and(img, img, mask=cntMask)
+        hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
+        # Blue mask
+        lower = np.array([100, 50, 50])
+        upper = np.array([135, 240, 240])
+        buleMask = cv2.inRange(hsv, lower, upper)
+        prop = np.sum(buleMask) / np.sum(cntMask)  # cal proportion of expected color
+        if prop < 0.7:
+            flag = 1
+        # ---------- draw and save ROI ---------------------- #
+
         if flag == 0:
             rectCnt.extend([[approx, (cx, cy)]])  # save approx Polygon and center
             cv2.drawContours(img, cnt, -1, (255, 255, 0), 1)
@@ -327,29 +406,110 @@ def detectRect(cnt, rectCnt):
             cv2.putText(img, 'rect', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
             transform_rect(img, approx)
     return rectCnt
+"""
 
-
-def detectCir(cnt, cirCent):
-    if len(cnt) < 50:
-        return cirCent
+def detectCir(cnt, cirCnt):
+    if len(cnt) < 20:
+        return cirCnt
     S1 = cv2.contourArea(cnt)
     ell = cv2.fitEllipse(cnt)
+    pos, size, angle = ell
+    ex, ey = pos
+    dx, dy = size
     S2 = math.pi*ell[1][0]*ell[1][1]
-    if (S1/S2) > 0.2:
-        cv2.ellipse(img, ell, (0, 255, 0), 1)
-        rect = cv2.minAreaRect(cnt)
-        box = cv2.boxPoints(rect)
-        box = np.int0(box)
-        transform_circle(img, box)
+    if S2 < 1000:
+        return cirCnt
+    prop = S1 / S2
+    if prop > 0.22:
+        # check repeat contour
+        mm = cv2.moments(cnt)  # cal center
+        cx = int(mm['m10'] / mm['m00'])
+        cy = int(mm['m01'] / mm['m00'])
+        flag = 0
+        # 0: need more check;
+        # 1: blue circle;
+        # 2: red and blue circle;
+        # 3: red and yellow circle;
+        # 4: not interested circle;
+        for species in cirCnt: # check every kind circle
+            for center in species:  # check repeat contour
+                k = np.square(center[0][0] - cx) + np.square(center[0][1] - cy)
+                if k < 20:
+                    flag = 4
+                    break
+            if flag == 4:
+                break
+        # detect outliers(center of contour should close to ellipse)
+        d = np.square(ell[0][0] - cx) + np.square(ell[0][1] - cy)
+        if d > 20:
+            flag = 4
+
+        GoF = 0  # Goodness Of Fit, the smaller the better (not sure)
+        for point in cnt:
+            posx = (point[0][0] - ex) * math.cos(-angle) - (point[0][1] - ey) * math.sin(-angle)
+            posy = (point[0][0] - ex) * math.sin(-angle) + (point[0][1] - ey) * math.cos(-angle)
+            GoF += abs(np.square(posx/dx) + np.square(posy/dy) - 0.25)
+        # GoF = GoF / cnt.size
+        if GoF > 10:
+            flag = 4
+
+        if flag != 4:
+            # ------------- detect color in contour ------------------------------ #
+            # make contour mask
+            cntMask = np.zeros((480, 640), np.uint8)
+            fillCnt = []
+            fillCnt.append(cnt)
+            cv2.drawContours(cntMask, fillCnt, -1, 255, -1)  # fill contour with white
+
+            res = cv2.bitwise_and(img, img, mask=cntMask)
+            hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
+            # Red and yellow mask
+            # Two edge of the Hue turnel
+            lower1 = np.array([160, 10, 100])
+            upper1 = np.array([180, 250, 250])
+            redMask1 = cv2.inRange(hsv, lower1, upper1)
+            lower2 = np.array([0, 10, 100])
+            upper2 = np.array([40, 240, 240])
+            ryMask = cv2.inRange(hsv, lower2, upper2) | redMask1
+
+            # Blue mask
+            lower = np.array([100, 50, 50])
+            upper = np.array([150, 240, 240])
+            blueMask = cv2.inRange(hsv, lower, upper)
+            # cv2.imshow('img', blueMask)
+            # cv2.waitKey(0)
+            # classify base on color
+            blueProp = np.sum(blueMask) / np.sum(cntMask)
+            ryProP = np.sum(ryMask) / np.sum(cntMask)
+            if blueProp > 0.7:
+                flag = 1
+            elif (blueProp > 0.2) and (ryProP > 0.2):
+                flag = 2
+            elif ryProP > 0.7:
+                flag = 3
+            # ---------- draw and save ROI ---------------------------------------- #
+            if flag != 0:
+                cirCnt[flag-1].extend([ell])  # save ellipse center and size
+                cv2.ellipse(img, ell, (0, 255, 255), 1)
+                rect = cv2.minAreaRect(cnt)
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                type = transform_circle(img, box, flag)
+                cv2.drawContours(img, cnt, -1, (0, 255, 255), 2)
+                x = int(ell[0][0])
+                y = int(ell[0][1])
+                cv2.putText(img, 'cir%d' % flag, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+    return cirCnt
+
 
 # ------------- Shape detection ------------------------------------------ #
 triCnt = []
 rectCnt = []
-cirCent = []
+cirCnt = [[], [], []]  # bule circle, red & yellow circle, red & bule circle
 for cnt in contours:
     triCnt = detectTri(cnt, triCnt)
-    rectCnt = detectRect(cnt, rectCnt)
-    cirCent = detectCir(cnt, cirCent)
+    #rectCnt = detectRect(cnt, rectCnt)
+    cirCent = detectCir(cnt, cirCnt)
 
 
 cv2.imshow('img', img)
