@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import math
 
-imgOri = cv2.imread('test_img\\cir3.jpg')  # RGB space imput image
+imgOri = cv2.imread('test_img\\test.png')  # RGB space imput image
 
 # ------------------Filter--------------------------------------------------- #
 img = cv2.bilateralFilter(imgOri, 10, 75, 75)
@@ -12,21 +12,23 @@ img = cv2.bilateralFilter(imgOri, 10, 75, 75)
 # -------------- Find & Draw Contour ---------------------------------------- #
 gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 # two different thresh, canny has better result
-# ret, thresh = cv2.threshold(gray, 127, 255, 0)
-binaryImg = cv2.Canny(gray, 100, 250)
-h = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-contours = h[0]
+# ret, thresh = cv2.threshold(gray, 150, 255, 0)
+thresh = 50
+binaryImg = cv2.Canny(gray, thresh, 3*thresh)
+contours, hierarchy = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+# cv2.imshow('img', binaryImg)
+# cv2.waitKey(0)
 
 
 def detectTri(cnt, triCnt):
     # -------- Polygon detection -------------------------------------------- #
-    epsilon = 0.05 * cv2.arcLength(cnt, True)
+    epsilon = 0.15 * cv2.arcLength(cnt, True)
     approx = cv2.approxPolyDP(cnt, epsilon, True)
     # Analyse shape
     corners = len(approx)
     # Calculate space
     S1 = cv2.contourArea(cnt)
-    if corners == 3 and S1 > 1000:
+    if corners == 3 and S1 > 100:
         # choose contour base on corner and space
         mm = cv2.moments(cnt)  # cal center
         cx = int(mm['m10'] / mm['m00'])
@@ -71,13 +73,13 @@ def detectTri(cnt, triCnt):
 def detectRect(cnt, rectCnt):
     # -------- Polygon detection --------------------------------------------- #
     # (!!! repeat code, probably add tri and rect in same func)
-    epsilon = 0.05 * cv2.arcLength(cnt, True)
+    epsilon = 0.01 * cv2.arcLength(cnt, True)
     approx = cv2.approxPolyDP(cnt, epsilon, True)
     # Analyse shape
     corners = len(approx)
     # Calculate space
     S1 = cv2.contourArea(cnt)
-    if corners == 4 and S1 > 150:
+    if corners == 4 and S1 > 100:
         # choose contour base on corner and space
         mm = cv2.moments(cnt)  # cal center
         cx = int(mm['m10'] / mm['m00'])
@@ -116,11 +118,16 @@ def detectRect(cnt, rectCnt):
 
 
 def detectCir(cnt, cirCnt):
-    if len(cnt) < 50:
+    if len(cnt) < 20:
         return cirCnt
     S1 = cv2.contourArea(cnt)
     ell = cv2.fitEllipse(cnt)
+    pos, size, angle = ell
+    ex, ey = pos
+    dx, dy = size
     S2 = math.pi*ell[1][0]*ell[1][1]
+    if S2 < 1000:
+        return cirCnt
     prop = S1 / S2
     if prop > 0.22:
         # check repeat contour
@@ -148,6 +155,15 @@ def detectCir(cnt, cirCnt):
         if d > 20:
             flag = 4
 
+        GoF = 0  # Goodness Of Fit, the smaller the better (not sure)
+        for point in cnt:
+            posx = (point[0][0] - ex) * math.cos(-angle) - (point[0][1] - ey) * math.sin(-angle)
+            posy = (point[0][0] - ex) * math.sin(-angle) + (point[0][1] - ey) * math.cos(-angle)
+            GoF += abs(np.square(posx/dx) + np.square(posy/dy) - 0.25)
+        # GoF = GoF / cnt.size
+        if GoF > 10:
+            flag = 4
+
         if flag != 4:
             # ------------- detect color in contour ------------------------------ #
             # make contour mask
@@ -169,14 +185,16 @@ def detectCir(cnt, cirCnt):
 
             # Blue mask
             lower = np.array([100, 50, 50])
-            upper = np.array([135, 240, 240])
+            upper = np.array([150, 240, 240])
             blueMask = cv2.inRange(hsv, lower, upper)
+            # cv2.imshow('img', blueMask)
+            # cv2.waitKey(0)
             # classify base on color
             blueProp = np.sum(blueMask) / np.sum(cntMask)
             ryProP = np.sum(ryMask) / np.sum(cntMask)
             if blueProp > 0.7:
                 flag = 1
-            elif (blueProp > 0.2) and (ryProP > 0.4):
+            elif (blueProp > 0.2) and (ryProP > 0.2):
                 flag = 2
             elif ryProP > 0.7:
                 flag = 3
@@ -197,7 +215,7 @@ rectCnt = []
 cirCnt = [[], [], []]  # bule circle, red & yellow circle, red & bule circle
 for cnt in contours:
     triCnt = detectTri(cnt, triCnt)
-    rectCnt = detectRect(cnt, rectCnt)
+    # rectCnt = detectRect(cnt, rectCnt)
     cirCnt = detectCir(cnt, cirCnt)  # the stop sign can be treated as circle
 
 cv2.imshow('img', img)
