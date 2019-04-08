@@ -1,0 +1,130 @@
+#!/usr/bin/env python
+
+import math
+import sys
+import json
+import numpy as np
+import rospy
+import tf2_ros
+import tf2_geometry_msgs
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3
+from aruco_msgs.msg import MarkerArray
+from crazyflie_driver.msg import Position
+
+aruco_true_pose = None
+tf_buf = None
+tf_lstn = None
+d_buf = None
+yaw_buf = None
+
+def transform_callback(data):
+    global aruco_true_pose, d_buf, yaw_buf
+
+    # transform pose in camera link to odm link
+    aruco_detect_pose = np.array([None for i in range(16)])
+    for aruco in data.markers:
+        goal = PoseStamped()
+        goal.header.stamp = rospy.Time.now()
+        goal.header.frame_id = "cf1/camera_link"
+        goal.pose = aruco.pose.pose
+        aruco_detect_pose[aruco.id] = tf_buf.transform(goal, 'cf1/odom', rospy.Duration(0.1))
+
+    # calculate the difference (true_pose detect_pose)
+    position_x = 0
+    position_y = 0
+    yaw = 0
+    j = 0
+    for i in range(16):
+        if aruco_detect_pose[i] != None:
+            position_x = position_x + aruco_true_pose[i].pose.position.x - aruco_detect_pose[i].pose.position.x
+            position_y = position_y + aruco_true_pose[i].pose.position.y - aruco_detect_pose[i].pose.position.y
+            roll, pitch, yaw_true = euler_from_quaternion((aruco_true_pose[i].pose.orientation.x,
+                                                           aruco_true_pose[i].pose.orientation.y,
+                                                           aruco_true_pose[i].pose.orientation.z,
+                                                           aruco_true_pose[i].pose.orientation.w))
+            roll, pitch, yaw_detect = euler_from_quaternion((aruco_detect_pose[i].pose.orientation.x,
+                                                             aruco_detect_pose[i].pose.orientation.y,
+                                                             aruco_detect_pose[i].pose.orientation.z,
+                                                             aruco_detect_pose[i].pose.orientation.w))
+            yaw = yaw + yaw_true - yaw_detect
+
+            j = j + 1
+
+    position_x = position_x / j
+    position_y = position_y / j
+    if not d_buf:
+        d_buf = 0
+        yaw_buf = 0
+
+    yaw = yaw / j
+    d = pow(position_x, 2) + pow(position_y, 2)
+    '''print('x y z yaw')
+    print(position_x)
+    print(position_y)
+    print(position_z)
+    print(' ')
+    print(d)
+    print(yaw)
+    print(' ')'''
+
+    if abs(d_buf-d) > 0.01:
+        (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(math.radians(roll),
+                                                                                             math.radians(pitch),
+                                                                                             math.radians(yaw))
+        # TF form odm to map
+        br = tf2_ros.TransformBroadcaster()
+        tfO2M = TransformStamped()
+        tfO2M.header.stamp = rospy.Time.now()
+        tfO2M.header.frame_id = "map"
+        tfO2M.child_frame_id = "cf1/odom"
+        tfO2M.transform.translation.x = position_x
+        tfO2M.transform.translation.y = position_y
+        tfO2M.transform.translation.z = 0.0
+        tfO2M.transform.rotation.x = orientation_x
+        tfO2M.transform.rotation.y = orientation_y
+        tfO2M.transform.rotation.z = orientation_z
+        tfO2M.transform.rotation.w = orientation_w
+        br.sendTransform(tfO2M)
+        print("publish tf")
+        print(d_buf-d)
+        print(yaw_buf-yaw)
+        d_buf = d
+        yaw_buf = yaw
+
+
+def read_from_marker(m):
+    t = PoseStamped()
+    t.header.stamp = rospy.Time.now()
+    t.header.frame_id = 'map'
+    t.pose.position = Vector3(*m['pose']['position'])
+    roll, pitch, yaw = m['pose']['orientation']
+    (t.pose.orientation.x,
+     t.pose.orientation.y,
+     t.pose.orientation.z,
+     t.pose.orientation.w) = quaternion_from_euler(math.radians(roll),
+                                                     math.radians(pitch),
+                                                     math.radians(yaw))
+    return t
+
+
+rospy.init_node('localization')
+sub_goal = rospy.Subscriber('/aruco/markers', MarkerArray, transform_callback)
+tf_buf   = tf2_ros.Buffer()
+tf_lstn  = tf2_ros.TransformListener(tf_buf)
+
+def main(argv=sys.argv):
+    global aruco_true_pose
+    # Load world JSON
+    args = rospy.myargv(argv=argv)  # Let ROS filter through the arguments
+    with open(args[1], 'rb') as f:
+        world = json.load(f)
+
+    # Get pose of aruco in map frame (accurate)
+	aruco_true_pose = {m["id"]: read_from_marker(m) for m in world['markers']}
+    rate = rospy.Rate(10)  # Hz
+    print('running')
+    rospy.spin()
+
+if __name__ == '__main__':
+    main()

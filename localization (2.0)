@@ -54,7 +54,7 @@ def main(argv=sys.argv):
         world = json.load(f)
 
     # Get pose of aruco in map frame (accurate)
-	aruco_map_pose = {m["id"]: read_from_marker(m) for m in world['markers']}
+	aruco_true_pose = {m["id"]: read_from_marker(m) for m in world['markers']}
 
     rate = rospy.Rate(10)  # Hz
     print('running')
@@ -65,7 +65,7 @@ def main(argv=sys.argv):
             continue
     # ---------------do localization ----------------
         # transform pose in camera link to odm link
-        aruco_odm_pose = np.array([None for i in range(16)])
+        aruco_detect_pose = np.array([None for i in range(16)])
         for aruco in aruco_marker.markers:
             if aruco.id > 15:
                 continue
@@ -73,59 +73,63 @@ def main(argv=sys.argv):
             goal.header.stamp = rospy.Time.now()
             goal.header.frame_id = "cf1/camera_link"
             goal.pose = aruco.pose.pose
-            aruco_odm_pose[aruco.id] = tf_buf.transform(goal, 'cf1/odom', rospy.Duration(1))
+            aruco_detect_pose[aruco.id] = tf_buf.transform(goal, 'cf1/odom', rospy.Duration(0.1))
 
         # calculate the difference (true_pose detect_pose)
         position_x = 0
         position_y = 0
+        position_z = 0
+        orientation_x = 0
+        orientation_y = 0
+        orientation_z = 0
+        orientation_w = 0
         yaw = 0
-
         j = 0
-        for i in range(16): # calculate average tf in markers at same time
-            if aruco_odm_pose[i] != None:
-                roll, pitch, yaw_map = euler_from_quaternion((aruco_map_pose[i].pose.orientation.x,
-                                                              aruco_map_pose[i].pose.orientation.y,
-                                                              aruco_map_pose[i].pose.orientation.z,
-                                                              aruco_map_pose[i].pose.orientation.w))
-                roll, pitch, yaw_odm = euler_from_quaternion((aruco_odm_pose[i].pose.orientation.x,
-                                                              aruco_odm_pose[i].pose.orientation.y,
-                                                              aruco_odm_pose[i].pose.orientation.z,
-                                                              aruco_odm_pose[i].pose.orientation.w))
-                yaw_error = yaw_map - yaw_odm
-                odm_d = math.sqrt(pow(aruco_odm_pose[i].pose.position.x, 2) + pow(aruco_odm_pose[i].pose.position.y, 2))
-                odm_x = odm_d * math.cos(yaw_odm - yaw_error)
-                odm_y = odm_d * math.sin(yaw_odm - yaw_error)
-
-                position_x += aruco_map_pose[i].pose.position.x - odm_x
-                position_y += aruco_map_pose[i].pose.position.y - odm_y
-                yaw +=  yaw_error
+        for i in range(16):
+            if aruco_detect_pose[i] != None:
+                position_x = position_x + aruco_true_pose[i].pose.position.x - aruco_detect_pose[i].pose.position.x
+                position_y = position_y + aruco_true_pose[i].pose.position.y - aruco_detect_pose[i].pose.position.y
+                position_z = position_z + aruco_true_pose[i].pose.position.z - aruco_detect_pose[i].pose.position.z
+                orientation_x = orientation_x + aruco_true_pose[i].pose.orientation.x - aruco_detect_pose[i].pose.orientation.x
+                orientation_y = orientation_y + aruco_true_pose[i].pose.orientation.y - aruco_detect_pose[i].pose.orientation.y
+                orientation_z = orientation_z + aruco_true_pose[i].pose.orientation.z - aruco_detect_pose[i].pose.orientation.z
+                orientation_w = orientation_w + aruco_true_pose[i].pose.orientation.w - aruco_detect_pose[i].pose.orientation.w
                 j = j + 1
 
-        if j==0:
-            rate.sleep()
-            continue
-        else:
-            position_x /= j
-            position_y /= j
-            yaw /= j
-
+        position_x = position_x / j
+        position_y = position_y / j
+        position_z = position_z / j
+        orientation_x = orientation_x / j
+        orientation_y = orientation_y / j
+        orientation_z = orientation_z / j
+        orientation_w = orientation_w / j
 
         # cal time average
-        queue.append([position_x, position_y, yaw])
+        queue.append([position_x, position_y, position_z, orientation_x, orientation_y, orientation_z, orientation_w])
         k = len(queue)
         timeAve_x = 0
         timeAve_y = 0
-        timeAve_yaw = 0
-
+        timeAve_z = 0
+        timeAve_ox = 0
+        timeAve_oy = 0
+        timeAve_oz = 0
+        timeAve_ow = 0
         for i in queue:
-            timeAve_x +=  i[0]
-            timeAve_y +=  i[1]
-            timeAve_yaw +=  i[2]
+            timeAve_x = timeAve_x + i[0]
+            timeAve_y = timeAve_y + i[1]
+            timeAve_z = timeAve_z + i[2]
+            timeAve_ox = timeAve_ox + i[3]
+            timeAve_oy = timeAve_oy + i[4]
+            timeAve_oz = timeAve_oz + i[5]
+            timeAve_ow = timeAve_ow + i[6]
 
-        timeAve_x /= k
-        timeAve_y /= k
-        timeAve_yaw /= k
-
+        timeAve_x = timeAve_x / k
+        timeAve_y = timeAve_y / k
+        timeAve_z = timeAve_z / k
+        timeAve_ox = timeAve_ox / k
+        timeAve_oy = timeAve_oy / k
+        timeAve_oz = timeAve_oz / k
+        timeAve_ow = timeAve_ow / k
 
         d = pow(timeAve_x, 2) + pow(timeAve_y, 2)
 
@@ -134,9 +138,6 @@ def main(argv=sys.argv):
             yaw_buf = 0
 
         if abs(d_buf-d) > 0.01 or i >= 10:
-            (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.001,
-                                                                                                 0.001,
-                                                                                                 timeAve_yaw)
             # TF form odm to map
             br = tf2_ros.TransformBroadcaster()
             tfO2M = TransformStamped()
@@ -146,13 +147,13 @@ def main(argv=sys.argv):
             tfO2M.transform.translation.x = timeAve_x
             tfO2M.transform.translation.y = timeAve_y
             tfO2M.transform.translation.z = 0.0
-            tfO2M.transform.rotation.x = orientation_x
-            tfO2M.transform.rotation.y = orientation_y
-            tfO2M.transform.rotation.z = orientation_z
-            tfO2M.transform.rotation.w = orientation_w
+            tfO2M.transform.rotation.x = timeAve_ox
+            tfO2M.transform.rotation.y = timeAve_oy
+            tfO2M.transform.rotation.z = timeAve_oz
+            tfO2M.transform.rotation.w = timeAve_ow
             br.sendTransform(tfO2M)
             print("publish tf")
-            print(timeAve_yaw)
+            print(timeAve_x)
             d_buf = d
             i = 0
 
