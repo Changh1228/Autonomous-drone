@@ -1,0 +1,24 @@
+# Camera calibration for DD2419 fish eye cameras.
+# You should probably look into replacing this!
+
+image_width: 640
+image_height: 480
+camera_name: camera
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [232.777576, 0.000000, 320.000000, 0.000000, 232.777576, 240.000000, 0.000000, 0.000000, 1.000000]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [0.174093, -0.204613,  0.000000, 0.000000, 0.048799]
+
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [232.777576, 0.000000, 320.000000, 0.000000, 0.000000, 232.777576, 240.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000]
