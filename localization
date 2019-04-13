@@ -141,7 +141,7 @@ def main(argv=sys.argv):
     d_buf = None
     yaw_buf = None
 
-    queue_len = 1
+    queue_len = 6
     queue = deque(maxlen = queue_len) # make a queue length of 10 for time average
 
     # Load world JSON
