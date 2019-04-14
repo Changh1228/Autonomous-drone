@@ -4,34 +4,45 @@ import rospy
 import math
 from std_msgs.msg import Float64
 from aruco_msgs.msg import MarkerArray
+from sensor_msgs.msg import Imu
 
 
 '''
-Uncertainty means how reliable is the localization is
+uncertainty means how reliable is the localization is
 If no marker is seen, the uncertainty increase (faster if drone is moving)
 If find marker, the uncertainty decrease (faster if marker is nearer and drone moving slower)
 the region of unc is 0-100
 
-Note: havn't concern drone speed yet
+Note: only care about z angular_velocity and x, y linear_acceleration when concern uncertainty
 '''
 aruco_marker = None
+speed = 0
 
 
-def unc_callback(data):
+def aruco_callback(data):
     global aruco_marker
     aruco_marker = data
 
 
+def imu_callback(data):
+    global speed  # "speed" of drone
+    speed = math.sqrt(pow(data.angular_velocity.z, 2) +
+                      pow(data.linear_acceleration.x, 2) +
+                      pow(data.linear_acceleration.y, 2))
+
+
 def main():
-    global aruco_marker
+    global aruco_marker, speed
 
     rospy.init_node('uncertainty')
-    rospy.Subscriber('/aruco/markers', MarkerArray, unc_callback)
+    rospy.Subscriber('/aruco/markers', MarkerArray, aruco_callback)
+    rospy.Subscriber('/cf1/imu', Imu, imu_callback)
     pub = rospy.Publisher('/localization/unc', Float64, queue_size=10)
     rate = rospy.Rate(10) # 10hz
     print('Uncertainty running')
 
     uncertainty = 0
+    unc_imu = 0
     while not rospy.is_shutdown():
         if aruco_marker == None:
             # when starting no marker is updated, uncertainty is large
@@ -52,16 +63,18 @@ def main():
                     d = d_now  # max distance and its ID
                     id = aruco.id
             delta_t = rospy.Time.now().secs - aruco_marker.header.stamp.secs
-            if delta_t > 1:
-                uncertainty += 5
-            else:
-                uncertainty -= 10 / d
 
+            # uncertainty from measurement (camera)
+            if delta_t < 1:
+                uncertainty += (speed- 5 / d)
+            else:
+                uncertainty += speed
             if uncertainty < d*10:
                 uncertainty = d*10
             elif uncertainty > 100:
-                uncertainty = 100
-            
+                uncertainty = 100.0
+
+            #print(uncertainty)
             pub.publish(uncertainty)
         rate.sleep()
 
