@@ -2,132 +2,55 @@ import cv2
 import numpy as np
 import math
 from os import listdir
-# TODO: Put the directory of the image
-imgOri = cv2.imread('images_mine/2019-02-20-183908.jpg')  # RGB space imput image
+from tensorflow.python.keras.models import Sequential, Model, load_model
+from tensorflow.python.keras.layers import Dense, Flatten, GlobalAveragePooling2D, Conv2D, Dropout, Activation, MaxPooling2D
 
-# ------------------Filter--------------------------------------------------- #
-img = cv2.bilateralFilter(imgOri, 10, 75, 75)
 
-# -------------- Find & Draw Contour ---------------------------------------- #
-gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-# two different thresh, canny has better result ( !!! maybe try other edge detection)
-thresh = 50
-binaryImg = cv2.Canny(gray, thresh, 3*thresh)
-contours = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[1] #modification to work in OpenCV 3.4
+def create_model(number_classes):
+    model = Sequential()
+    model.add(Conv2D(32, (3, 3), padding='same',
+                     input_shape=(64, 64, 3)))
+    model.add(Activation('relu'))
+    model.add(Conv2D(32, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
-index = 0 # where we keep count of the valid shapes found
+    model.add(Conv2D(64, (3, 3), padding='same'))
+    model.add(Activation('relu'))
+    model.add(Conv2D(64, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
 
-def match_template(type, candidate, flag=5): # by default flag something random and just use it when cercle
+    model.add(Flatten())
+    model.add(Dense(512))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(number_classes))
+    model.add(Activation('softmax'))
+    return model
+
+def classify_nn(type, candidate, flag=5): # by default flag something random and just use it when cercle
     """
     :param type: String stating kind of sign. Possible values: 'rectangle','triangle','circle'
     :param candidate: The wraped image of the sign after being cropped from the original image
     :return: the name of the sign, i.e: dangerous_curve_left
     """
-    threshold = 0
-    sift = cv2.xfeatures2d.SIFT_create()
-    kp_1, desc_1 = sift.detectAndCompute(candidate, None)
-    idx = "unsure"
-    if type=='triangle':
-        for file in listdir('templates/triangle/'):
-            image = cv2.imread('templates/triangle/' + file)
-            resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
-            kp_2, desc_2 = sift.detectAndCompute(image, None)
-            index_params = dict(algorithm=0, trees=5)
-            search_params = dict()
-            flann = cv2.FlannBasedMatcher(index_params, search_params)
-            matches = flann.knnMatch(desc_1, desc_2, k=2)
-            good_points = 0
-            ratio = 0.5
-            for m, n in matches:
-                if m.distance < ratio * n.distance:
-                    good_points = good_points + 1
-            if (good_points > threshold):
-                threshold = good_points
-                idx = file
-                if (threshold > 10):
-                    break
-    if type=='rectangle':
-        for file in listdir('templates/rectangle/'):
-            image = cv2.imread('templates/rectangle/' + file)
-            resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
-            kp_2, desc_2 = sift.detectAndCompute(image, None)
-            index_params = dict(algorithm=0, trees=5)
-            search_params = dict()
-            flann = cv2.FlannBasedMatcher(index_params, search_params)
-            matches = flann.knnMatch(desc_1, desc_2, k=2)
-            good_points = 0
-            ratio = 0.6
-            for m, n in matches:
-                if m.distance < ratio * n.distance:
-                    good_points = good_points + 1
-            if (good_points > threshold):
-                threshold = good_points
-                idx = file
-                if (threshold > 10):
-                    break
-    if type=='circle':
-        # 1: blue circle;
-        # 2: red and blue circle;
-        # 3: red and yellow circle;
-        # 4: not interested circle;
-        if flag==1:
-            for file in listdir('templates/circle/blue/'):
-                image = cv2.imread('templates/circle/blue/' + file)
-                resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
-                kp_2, desc_2 = sift.detectAndCompute(image, None)
-                index_params = dict(algorithm=0, trees=5)
-                search_params = dict()
-                flann = cv2.FlannBasedMatcher(index_params, search_params)
-                matches = flann.knnMatch(desc_1, desc_2, k=2)
-                good_points = 0
-                ratio = 0.6
-                for m, n in matches:
-                    if m.distance < ratio * n.distance:
-                        good_points = good_points + 1
-                if (good_points > threshold):
-                    threshold = good_points
-                    idx = file
-                    if (threshold > 10):
-                        break
-        elif flag==2:
-            for file in listdir('templates/circle/red_blue/'):
-                image = cv2.imread('templates/circle/red_blue/' + file)
-                resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
-                kp_2, desc_2 = sift.detectAndCompute(image, None)
-                index_params = dict(algorithm=0, trees=5)
-                search_params = dict()
-                flann = cv2.FlannBasedMatcher(index_params, search_params)
-                matches = flann.knnMatch(desc_1, desc_2, k=2)
-                good_points = 0
-                ratio = 0.6
-                for m, n in matches:
-                    if m.distance < ratio * n.distance:
-                        good_points = good_points + 1
-                if (good_points > threshold):
-                    threshold = good_points
-                    idx = file
-                    if (threshold > 10):
-                        break
-        elif flag==3:
-            for file in listdir('templates/circle/red_yellow/'):
-                image = cv2.imread('templates/circle/red_yellow/' + file)
-                resized_image = cv2.resize(image, (candidate.shape[0], candidate.shape[1]))
-                kp_2, desc_2 = sift.detectAndCompute(image, None)
-                index_params = dict(algorithm=0, trees=5)
-                search_params = dict()
-                flann = cv2.FlannBasedMatcher(index_params, search_params)
-                matches = flann.knnMatch(desc_1, desc_2, k=2)
-                good_points = 0
-                ratio = 0.6
-                for m, n in matches:
-                    if m.distance < ratio * n.distance:
-                        good_points = good_points + 1
-                if (good_points > threshold):
-                    threshold = good_points
-                    idx = file
-                    if (threshold > 10):
-                        break
-    return idx
+    res = cv2.resize(candidate, dsize=(size_crop, size_crop), interpolation=cv2.INTER_CUBIC)
+    # res is in BGR
+    #res = cv2.cvtColor(res, cv2.COLOR_BGR2RGB)
+    img = np.reshape(res, [1, size_crop, size_crop, 3])
+    if type == "rectangle":
+        classes = model_rectangle.predict_classes(img)
+        return labels_rectangle[classes[0]]
+    elif type == "triangle":
+        classes = model_triangle.predict_classes(img)
+        return labels_triangle[classes[0]]
+    else:
+        classes = model_cercle.predict_classes(img)
+        return labels_cercle[classes[0]]
+
 
 def transform_tri(image, vector1, vector2, other_vec):
     """
@@ -136,29 +59,30 @@ def transform_tri(image, vector1, vector2, other_vec):
     :param vector2: Second vertex of the longest side of the triangle observed
     :param other_vec: The other vertex, the one we need to add the perpendicular line to find the other 2 points of
     quadrilater
-    :return:
+    :return: A box fitting the triangle where two vertex of the box are two vertex of triangle and the following vertex
+    triangle is in the middle of the counter side of box
     """
 
     # Add some margins to the found vertex in order to transform better the triangle
     if (other_vec[0][0] < vector1[0][0]):
-        vector1[0][0] = vector1[0][0] + 5
+        vector1[0][0] = vector1[0][0] + 2
     else:
-        vector1[0][0] = vector1[0][0] - 5
+        vector1[0][0] = vector1[0][0] - 2
 
     if (other_vec[0][0] < vector2[0][0]):
-        vector2[0][0] = vector2[0][0] + 5
+        vector2[0][0] = vector2[0][0] + 2
     else:
-        vector2[0][0] = vector2[0][0] - 5
+        vector2[0][0] = vector2[0][0] - 2
 
     if (other_vec[0][1] < vector1[0][1]):
-        vector1[0][1] = vector1[0][1] + 5
+        vector1[0][1] = vector1[0][1] + 2
     else:
-        vector1[0][1] = vector1[0][1] - 5
+        vector1[0][1] = vector1[0][1] - 2
 
     if (other_vec[0][1] < vector2[0][1]):
-        vector2[0][1] = vector2[0][1] + 5
+        vector2[0][1] = vector2[0][1] + 2
     else:
-        vector2[0][1] = vector2[0][1] - 5
+        vector2[0][1] = vector2[0][1] - 2
 
 
     # Adding the same vector of the longest side to the other_vec (half each side) point we obtain the 2 remaining points
@@ -174,20 +98,8 @@ def transform_tri(image, vector1, vector2, other_vec):
         [vector2[0][0], vector2[0][1]],
         [point1[0][0], point1[0][1]],
         [point2[0][0], point2[0][1]]], dtype="float32") # obtain a box with the 4 points to transform
-    dst = np.array([
-        [0,int(round(30 * np.sqrt(3)))],
-        [60,int(round(30 * np.sqrt(3)))],
-        [60, 0],
-        [0, 0]], dtype="float32") # the output size of the box, normalized would be 1 for the base and sqrt(3)/2 for height
 
-    M = cv2.getPerspectiveTransform(box, dst)
-    warped = cv2.warpPerspective(image, M, (60, int(round(30 * np.sqrt(3)))))
-    cv2.imwrite('results/triangle/'+str(index)+'triangle.jpg', warped)
-
-    type = match_template("triangle", warped) #returns the string saying to which template it belongs to, if none returns
-    # "unsure"
-    return type
-
+    return box
 
 
 def order_points(pts):
@@ -216,122 +128,71 @@ def order_points(pts):
     # return the ordered coordinates
     return rect
 
-def transform_rect(image, vertexs):
-    global index
-    # obtain a consistent order of the points and unpack them
-    # individually
-    rect = order_points(vertexs)
-    (tl, tr, br, bl) = rect
-
-    # compute the width of the new image, which will be the
-    # maximum distance between bottom-right and bottom-left
-    # x-coordiates or the top-right and top-left x-coordinates
-    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-    maxWidth = max(int(widthA), int(widthB))
-
-    # compute the height of the new image, which will be the
-    # maximum distance between the top-right and bottom-right
-    # y-coordinates or the top-left and bottom-left y-coordinates
-    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-    maxHeight = max(int(heightA), int(heightB))
-
-    # now that we have the dimensions of the new image, construct
-    # the set of destination points to obtain a "birds eye view",
-    # (i.e. top-down view) of the image, again specifying points
-    # in the top-left, top-right, bottom-right, and bottom-left
-    # order
-    dst = np.array([
-        [0, 0],
-        [maxWidth - 1, 0],
-        [maxWidth - 1, maxHeight - 1],
-        [0, maxHeight - 1]], dtype="float32")
-
-    # compute the perspective transform matrix and then apply it
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
-    type = match_template("rectangle", warped)
-    cv2.imwrite('results/rectangle/'+str(index)+'rectangle.jpg', warped)
-    index = index+1
-
-def transform_circle(image, vertexs, flag):
-    global index
-    # obtain a consistent order of the points and unpack them
-    # individually
-    rect = order_points(vertexs)
-    (tl, tr, br, bl) = rect
-
-    # compute the width of the new image, which will be the
-    # maximum distance between bottom-right and bottom-left
-    # x-coordiates or the top-right and top-left x-coordinates
-    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-    maxWidth = max(int(widthA), int(widthB))
-
-    # compute the height of the new image, which will be the
-    # maximum distance between the top-right and bottom-right
-    # y-coordinates or the top-left and bottom-left y-coordinates
-    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-    maxHeight = max(int(heightA), int(heightB))
-
-    # now that we have the dimensions of the new image, construct
-    # the set of destination points to obtain a "birds eye view",
-    # (i.e. top-down view) of the image, again specifying points
-    # in the top-left, top-right, bottom-right, and bottom-left
-    # order
-
-    if maxWidth>maxHeight: # get the dimension of the bigger vertex of rectangle and reshape cercle according to that
-        len_square = maxWidth
-    else:
-        len_square=maxHeight
-
-    dst = np.array([
-        [0, 0],
-        [len_square - 1, 0],
-        [len_square - 1, len_square - 1],
-        [0, len_square - 1]], dtype="float32")
-
-    # compute the perspective transform matrix and then apply it
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (len_square, len_square)) # the result should be a cercle inside a square
-    type = match_template("circle", warped, flag)
-    cv2.imwrite('results/circle/'+str(index)+'circle.jpg', warped)
-    index = index+1
-
-    return type
 
 
-def detectTri(cnt, triCnt):
-    global index
 
-    # -------- Polygon detection -------------------------------------------- #
-    epsilon = 0.15 * cv2.arcLength(cnt, True)
+def increase_rect(pts):
+    """
+    :param pts: The points returned by contour
+    :return: A bigger rectangle (mainly for airport sign) as sometimes contours provides just a little part of the sign
+    """
+    pts = np.squeeze(pts)
+    rect = np.zeros((4, 2), dtype="float32")
+
+    # the top-left point will have the smallest sum, whereas
+    # the bottom-right point will have the largest sum
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[0][0] = rect[0][0] - 30
+    if rect[0][0] < 0:
+        rect[0][0] = 0
+    rect[0][1] = rect[0][1] - 30
+    if rect[0][1] < 0:
+        rect[0][1] = 0
+    rect[2] = pts[np.argmax(s)]
+    rect[2][0] = rect[2][0] + 30
+    rect[2][1] = rect[2][1] + 30
+    if rect[2][0] > 640:
+        rect[2][0] = 640
+    if rect[2][1] > 480:
+        rect[2][1] = 480
+    # now, compute the difference between the points, the
+    # top-right point will have the smallest difference,
+    # whereas the bottom-left will have the largest difference
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[1][0] = rect[1][0] + 30
+    rect[1][1] = rect[1][1] - 30
+    if rect[1][1] < 0:
+        rect[1][1] = 0
+    if rect[1][0] > 480:
+        rect[1][0] = 480
+    rect[3] = pts[np.argmax(diff)]
+    rect[3][0] = rect[3][0] - 30
+    rect[3][1] = rect[3][1] + 30
+    if rect[3][1] > 640:
+        rect[3][1] = 640
+    if rect[3][0] < 0:
+        rect[3][0] = 0
+    # return the ordered coordinates
+    return rect
+
+
+def detect_triangle(cnt):
+    global index_triangle
+    global triCnt
+
+    epsilon = 0.05 * cv2.arcLength(cnt, True) # 0.05 works for triangle
     approx = cv2.approxPolyDP(cnt, epsilon, True)
-    # Analyse shape
+    area_contour = cv2.contourArea(approx)
     corners = len(approx)
-    # Calculate space
-    S1 = cv2.contourArea(cnt)
-    if corners == 3 and S1 > 100:
-        # choose contour base on corner and space
-        mm = cv2.moments(cnt)  # cal center
-        cx = int(mm['m10'] / mm['m00'])
-        cy = int(mm['m01'] / mm['m00'])
-        # check repeat contour
-        flag = 0
-        for center in triCnt:
-            k = np.square(center[1][0] - cx) + np.square(center[1][1] - cy)
-            if k < 20:
-                flag = 1
-                break
-        # ------------- detect color in contour ------------------------------ #
-        # make contour mask
-        cntMask = np.zeros((480, 640), np.uint8)
-        fillCnt = []
-        fillCnt.append(cnt)
-        cv2.drawContours(cntMask, fillCnt, -1, 255, -1)
-        res = cv2.bitwise_and(img, img, mask=cntMask)
+
+    #----------------------------------------- Check proportions ---------------------------------------------
+    if corners == 3:
+        # probably a triangle
+        mask_triangle = np.zeros((480, 640), np.uint8)
+        cv2.fillPoly(mask_triangle, pts=[approx], color=(255, 255, 255))  # Let just the contour of interest
+        res = cv2.bitwise_and(img, img, mask=mask_triangle)
         hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
         # Red and yellow mask
         # Two edge of the Hue turnel
@@ -342,175 +203,340 @@ def detectTri(cnt, triCnt):
         upper2 = np.array([40, 240, 240])
         redMask2 = cv2.inRange(hsv, lower2, upper2)
         redMask = redMask1 | redMask2
-        prop = np.sum(redMask) / np.sum(cntMask)  # cal proportion of expected color
-        if prop < 0.7:
-            flag = 1
-                # ---------- draw and save ROI ---------------------- #
-        if flag == 0:
-            type = transform_tri(img, approx[0], approx[2], approx[1])
-            if type != 'unsure':
-                triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
-            else:
-                type = transform_tri(img, approx[0], approx[1], approx[2])
-                if type != 'unsure':
-                    triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
-                else:
-                    type = transform_tri(img, approx[1], approx[2], approx[0])
-                    triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
-            index = index + 1
-    return triCnt
-
-"""
-def detectRect(cnt, rectCnt):
-    # Polygon approximation (!!! repeat code, probably add tri and rect in same func)
-    epsilon = 0.05 * cv2.arcLength(cnt, True)
-    approx = cv2.approxPolyDP(cnt, epsilon, True)
-    # Analyse shape
-    corners = len(approx)
-    # Calculate space
-    S1 = cv2.contourArea(cnt)
-    if corners == 4 and S1 > 150:
-        # choose contour base on corner and space
-        mm = cv2.moments(cnt)  # cal center
-        cx = int(mm['m10'] / mm['m00'])
-        cy = int(mm['m01'] / mm['m00'])
-        # check repeat contour
+        prop = np.sum(redMask) / np.sum(mask_triangle)  # cal proportion of expected color
         flag = 0
-        for center in rectCnt:
-            k = np.square(center[1][0] - cx) + np.square(center[1][1] - cy)
-            if k < 20:
-                flag = 1
-                break
-        # ------------- detect color in contour ------------- #
-        # make contour mask
-        cntMask = np.zeros((480, 640), np.uint8)
-        fillCnt = []
-        fillCnt.append(cnt)
-        cv2.drawContours(cntMask, fillCnt, -1, 255, -1)
-        res = cv2.bitwise_and(img, img, mask=cntMask)
-        hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
-        # Blue mask
-        lower = np.array([100, 50, 50])
-        upper = np.array([135, 240, 240])
-        buleMask = cv2.inRange(hsv, lower, upper)
-        prop = np.sum(buleMask) / np.sum(cntMask)  # cal proportion of expected color
-        if prop < 0.7:
+        if prop < 0.6:
             flag = 1
-        # ---------- draw and save ROI ---------------------- #
-
+            # ---------- draw and save ROI ---------------------- #
         if flag == 0:
-            rectCnt.extend([[approx, (cx, cy)]])  # save approx Polygon and center
-            cv2.drawContours(img, cnt, -1, (255, 255, 0), 1)
-            x, y, w, h = cv2.boundingRect(cnt)
-            cv2.rectangle(img, (x-5, y-5), (x+w+5, y+h+5), (255, 255, 0), 1)
-            cv2.putText(img, 'rect', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
-            transform_rect(img, approx)
-    return rectCnt
-"""
-
-def detectCir(cnt, cirCnt):
-    if len(cnt) < 20:
-        return cirCnt
-    S1 = cv2.contourArea(cnt)
-    ell = cv2.fitEllipse(cnt)
-    pos, size, angle = ell
-    ex, ey = pos
-    dx, dy = size
-    S2 = math.pi*ell[1][0]*ell[1][1]
-    if S2 < 1000:
-        return cirCnt
-    prop = S1 / S2
-    if prop > 0.22:
-        # check repeat contour
-        mm = cv2.moments(cnt)  # cal center
-        cx = int(mm['m10'] / mm['m00'])
-        cy = int(mm['m01'] / mm['m00'])
-        flag = 0
-        # 0: need more check;
-        # 1: blue circle;
-        # 2: red and blue circle;
-        # 3: red and yellow circle;
-        # 4: not interested circle;
-        for species in cirCnt: # check every kind circle
-            for center in species:  # check repeat contour
-                k = np.square(center[0][0] - cx) + np.square(center[0][1] - cy)
+            # choose contour base on corner and space
+            flag_closeness = 0
+            mm = cv2.moments(cnt)  # cal center
+            cx = int(mm['m10'] / mm['m00'])
+            cy = int(mm['m01'] / mm['m00'])
+            for center in triCnt:
+                k = np.square(center[1][0] - cx) + np.square(center[1][1] - cy)
                 if k < 20:
-                    flag = 4
+                    flag_closeness = 1
                     break
-            if flag == 4:
-                break
-        # detect outliers(center of contour should close to ellipse)
-        d = np.square(ell[0][0] - cx) + np.square(ell[0][1] - cy)
-        if d > 20:
-            flag = 4
+            if flag_closeness == 0:
+                box_triangle = transform_tri(img, approx[0], approx[1], approx[2])
+                size_crop = 64
+                dst = np.array([
+                    [0, 0],
+                    [size_crop - 1, 0],
+                    [size_crop - 1, size_crop - 1],
+                    [0, size_crop - 1]], dtype="float32")
+                M = cv2.getPerspectiveTransform(box_triangle, dst)
+                warped_triangle = cv2.warpPerspective(img, M, (size_crop, size_crop))
+                cv2.imwrite('results/triangle/' + str(index) + 'triangle.jpg', warped_triangle)
+                type = classify_nn("triangle", warped_triangle)  # returns the string saying to which template it belongs to
+                if type != "CRAP":
 
-        GoF = 0  # Goodness Of Fit, the smaller the better (not sure)
-        for point in cnt:
-            posx = (point[0][0] - ex) * math.cos(-angle) - (point[0][1] - ey) * math.sin(-angle)
-            posy = (point[0][0] - ex) * math.sin(-angle) + (point[0][1] - ey) * math.cos(-angle)
-            GoF += abs(np.square(posx/dx) + np.square(posy/dy) - 0.25)
-        # GoF = GoF / cnt.size
-        if GoF > 10:
-            flag = 4
+                    cv2.imwrite('results/triangle/' + str(index_cercle) + 'triangle.jpg', warped_triangle)
+                    triCnt.extend([[approx, (cx, cy), type]])  # save approx Polygon and center
+                    index_triangle = index_triangle + 1
 
-        if flag != 4:
-            # ------------- detect color in contour ------------------------------ #
-            # make contour mask
-            cntMask = np.zeros((480, 640), np.uint8)
-            fillCnt = []
-            fillCnt.append(cnt)
-            cv2.drawContours(cntMask, fillCnt, -1, 255, -1)  # fill contour with white
+def detect_rectangle(cnt):
+    global index_rectangle
 
-            res = cv2.bitwise_and(img, img, mask=cntMask)
-            hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
-            # Red and yellow mask
-            # Two edge of the Hue turnel
-            lower1 = np.array([160, 10, 100])
-            upper1 = np.array([180, 250, 250])
-            redMask1 = cv2.inRange(hsv, lower1, upper1)
-            lower2 = np.array([0, 10, 100])
-            upper2 = np.array([40, 240, 240])
-            ryMask = cv2.inRange(hsv, lower2, upper2) | redMask1
+    epsilon = 0.05 * cv2.arcLength(cnt, True) # for STOP detects 8 points ; 0.05 works for triangle
+    approx = cv2.approxPolyDP(cnt, epsilon, True)
+    area_contour = cv2.contourArea(approx)
+    corners = len(approx)
+    rectangle_points = cv2.minAreaRect(approx)
+    min_rectangle = np.int0(cv2.boxPoints(rectangle_points))
+    area_rectangle = cv2.contourArea(min_rectangle)
+    if area_rectangle < 250: # TODO: IMPROVE?? Is to avoid rectangles of 0 area dividing in proportion_rect
+        return
+    proportion_rect = area_contour/area_rectangle
+    thresh_rectangle = 0.70
+    flag_preprocess = 0
 
-            # Blue mask
-            lower = np.array([100, 50, 50])
-            upper = np.array([150, 240, 240])
-            blueMask = cv2.inRange(hsv, lower, upper)
-            # cv2.imshow('img', blueMask)
-            # cv2.waitKey(0)
-            # classify base on color
-            blueProp = np.sum(blueMask) / np.sum(cntMask)
-            ryProP = np.sum(ryMask) / np.sum(cntMask)
-            if blueProp > 0.7:
-                flag = 1
-            elif (blueProp > 0.2) and (ryProP > 0.2):
-                flag = 2
-            elif ryProP > 0.7:
-                flag = 3
-            # ---------- draw and save ROI ---------------------------------------- #
-            if flag != 0:
-                cirCnt[flag-1].extend([ell])  # save ellipse center and size
-                cv2.ellipse(img, ell, (0, 255, 255), 1)
-                rect = cv2.minAreaRect(cnt)
-                box = cv2.boxPoints(rect)
-                box = np.int0(box)
-                type = transform_circle(img, box, flag)
-                cv2.drawContours(img, cnt, -1, (0, 255, 255), 2)
-                x = int(ell[0][0])
-                y = int(ell[0][1])
-                cv2.putText(img, 'cir%d' % flag, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-    return cirCnt
+    if proportion_rect > 0.50 and proportion_rect < thresh_rectangle:  # I try to increase the size of the rectangle to see if more blue around
+        x, y, w, h = cv2.boundingRect(cnt)
+        new_rectangle = increase_rect([[x, y], [x, y + h], [x + w, y + h], [x + w, y]])
+        mask_rectangle_auxiliar = np.zeros((480, 640), np.uint8)
+        cv2.fillPoly(mask_rectangle_auxiliar, pts=[new_rectangle.astype(int)],
+                     color=(255, 255, 255))  # Let just the contour of interest
+        res = cv2.bitwise_and(img, img, mask=mask_rectangle_auxiliar)
+        hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
 
+        # ---------------Check the color -----------------
+        # Blue mask
+        lower_blue = np.array([100, 50, 50])
+        upper_blue = np.array([135, 240, 240])
+        blueMask = cv2.inRange(hsv, lower_blue, upper_blue)
+        blueMask = cv2.bitwise_and(blueMask, mask_rectangle_auxiliar)
+        # White mask
+        lower_white = np.array([205, 200, 190])  # COLOR IN BGR --> first blue and red at the end
+        upper_white = np.array([255, 255, 255])
+        whiteMask = cv2.inRange(res, lower_white, upper_white)  # IN BGR FORMAT
+        whiteMask = cv2.bitwise_and(whiteMask, mask_rectangle_auxiliar)
+
+        total_mask = whiteMask | blueMask
+
+        thresh_blue_white = 0.60
+
+        blue_contours = cv2.findContours(blueMask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[
+            1]  # TODO: Check if better use total_mask
+        blue_contours = [cv2.approxPolyDP(blue_contours[i], 0.05 * cv2.arcLength(blue_contours[i], True), True) for
+                         i in
+                         range(len(blue_contours))]
+        blue_contours = [blue_contours[i] for i in range(len(blue_contours)) if
+                         cv2.contourArea(blue_contours[i]) > 50]
+        if not blue_contours:
+            return
+        allpoints = np.concatenate([blue_contours[i] for i in range(len(blue_contours))])
+        rect_all_blue = cv2.minAreaRect(allpoints)
+        box_definitive = cv2.boxPoints(rect_all_blue)
+        box_definitive = np.int0(box_definitive)
+        epsilon = 0.05 * cv2.arcLength(cnt, True)  # for STOP detects 8 points ; 0.05 works for triangle
+        approx = cv2.approxPolyDP(allpoints, epsilon, True)
+        area_contour = cv2.contourArea(approx)
+        flag_preprocess = 1
+        min_rectangle = box_definitive
+
+    proportion_rect = area_contour/area_rectangle
+
+
+    if (proportion_rect > thresh_rectangle) or (flag_preprocess == 1): # TODO: Check if makes sense the preprocess
+        # probably a rectangle
+        mask_rectangle = np.zeros((480, 640), np.uint8)
+        cv2.fillPoly(mask_rectangle, pts=[approx], color=(255, 255, 255))  # Let just the contour of interest
+        res = cv2.bitwise_and(img, img, mask=mask_rectangle)
+        hsv = cv2.cvtColor(res, cv2.COLOR_BGR2HSV)
+
+        # ---------------Check the color -----------------
+        # Blue mask
+        lower_blue = np.array([100, 50, 50])
+        upper_blue = np.array([135, 240, 240])
+        blueMask = cv2.inRange(hsv, lower_blue, upper_blue)
+        blueMask = cv2.bitwise_and(blueMask, mask_rectangle)
+        # White mask
+        lower_white = np.array([205, 200, 190])  # COLOR IN BGR --> first blue and red at the end
+        upper_white = np.array([255, 255, 255])
+        whiteMask = cv2.inRange(res, lower_white, upper_white)  # IN BGR FORMAT
+        whiteMask = cv2.bitwise_and(whiteMask, mask_rectangle)
+
+
+        total_mask = whiteMask | blueMask
+
+        prop_blue_white = np.sum(total_mask)/np.sum(mask_rectangle)
+        white_prop = np.sum(whiteMask)/np.sum(mask_rectangle)
+        thresh_blue_white = 0.60
+
+        if prop_blue_white > thresh_blue_white and corners > 3 and white_prop > 0.05:#and corners < 8:
+
+            # choose contour base on corner and space
+            mm = cv2.moments(min_rectangle)  # cal center
+            cx = int(mm['m10'] / mm['m00'])
+            cy = int(mm['m01'] / mm['m00'])
+            # check repeat contour
+            flag_closeness = 0
+            for center in rectCnt:
+                k = np.sqrt(np.square(center[1][0] - cx) + np.square(
+                    center[1][1] - cy))  # don't consider rectangles very close to rectangles already found
+                if k < 20:
+                    flag_closeness = 1
+                    break
+
+            if flag_closeness == 0:
+                size_crop = 64
+                # Make perspective transformation
+                dst = np.array([
+                    [0, 0],
+                    [size_crop - 1, 0],
+                    [size_crop - 1, size_crop - 1],
+                    [0, size_crop - 1]], dtype="float32")
+
+                # compute the perspective transform matrix and then apply it
+                M = cv2.getPerspectiveTransform(min_rectangle.astype(np.float32), dst)
+                warped_rectangle = cv2.warpPerspective(imgOri, M, (size_crop, size_crop))  # TODO: Check if requires RGB or BGR
+                flag_nn = 0  # if flag 1 Im gonna draw the contour in final image
+                type = classify_nn("rectangle", warped_rectangle)
+                if type != "CRAP":
+                    cv2.imwrite('results/rectangle/' + str(index_rectangle) + 'rectangle.jpg', warped_rectangle)
+                    index_rectangle = index_rectangle + 1
+                    rectCnt.extend([[min_rectangle, (cx, cy), type]])
+
+
+def detect_cercle(cnt):
+    global index_cercle
+    global cirCnt
+
+    epsilon = 0.01 * cv2.arcLength(cnt, True) # for STOP detects 8 points ; 0.05 works for triangle
+    approx = cv2.approxPolyDP(cnt, epsilon, True)
+    area_contour = cv2.contourArea(approx)
+    corners = len(approx)
+
+    # TODO  : Fit minimum ellipse
+    thresh_ellipse = 0.85
+    proportion_ellipse = 0 # just to initialize it
+    if len(approx) >= 5: # If not fitEllipse gives error
+        ellipse = cv2.fitEllipse(approx)
+        (x, y), (MA, ma), angle = ellipse
+        area_ellipse = 0.25*math.pi * MA * ma # MA length major axis and ma length minor axis ellipse. Divided by 4 as axes
+        # and not semi-axes
+        proportion_ellipse = area_contour/area_ellipse
+
+    if (proportion_ellipse > thresh_ellipse) and (corners>6):
+        # should be a cercle
+        # TODO : Mask everything in the image except the inside of the cercle
+        mask_cercle = np.zeros((480, 640), np.uint8)
+        cv2.fillPoly(mask_cercle, pts=[approx], color=(255, 255, 255))  # TODO: Check if better approx or cnt
+        im_masked_cerc = cv2.bitwise_and(img, img, mask=mask_cercle)
+        im_masked_cerc_hsv = cv2.cvtColor(im_masked_cerc, cv2.COLOR_BGR2HSV)
+        # binary mask
+        bin_mask = cv2.cvtColor(im_masked_cerc, cv2.COLOR_RGB2GRAY)
+        _, bin_mask = cv2.threshold(bin_mask, 1, 255, cv2.THRESH_BINARY)
+        # TODO : Check for color distribution inside the cercle
+        # Red and yellow mask
+        # Two edge of the Hue turnel
+        lower1 = np.array([160, 10, 90])
+        upper1 = np.array([179, 250, 200]) # CHANGED BY ME
+        redMask1 = cv2.inRange(im_masked_cerc_hsv, lower1, upper1)
+        lower2 = np.array([0, 10, 100])
+        upper2 = np.array([40, 240, 240])
+        ryMask = cv2.inRange(im_masked_cerc_hsv, lower2, upper2) | redMask1
+
+        # Blue mask
+        lower = np.array([91, 80, 60])
+        upper = np.array([140, 255, 255])
+        blueMask = cv2.inRange(im_masked_cerc_hsv, lower, upper)
+
+        # White mask
+        lower_white = np.array([205, 200, 190])  # COLOR IN BGR --> first blue and red at the end
+        upper_white = np.array([255, 255, 255])
+        whiteMask = cv2.inRange(im_masked_cerc, lower_white, upper_white)  # IN BGR FORMAT
+        blue_whiteMask = blueMask | whiteMask
+
+        # Proportion
+        blue_white_Prop = np.sum(blue_whiteMask) / np.sum(bin_mask)
+        blueProp = np.sum(blueMask) / np.sum(bin_mask)
+        ryProp = np.sum(ryMask) / np.sum(bin_mask)
+
+        # TODO : Divide between colors
+        flag = 0
+        if (blue_white_Prop > 0.6 or (blue_white_Prop > 0.35 and proportion_ellipse > 0.91 and ryProp < 0.10)) and (blueProp > 0.25):
+            flag = 1
+        elif (blueProp > 0.25) and (ryProp > 0.17):
+            flag = 2
+        elif ryProp > 0.70 or (ryProp > 0.45 and proportion_ellipse > 0.90):
+            flag = 3
+
+        if flag != 4 and flag != 0:
+            mm = cv2.moments(cnt)  # cal center
+            cx = int(mm['m10'] / mm['m00'])
+            cy = int(mm['m01'] / mm['m00'])
+            flag_closeness = 0
+            for type_cercle in cirCnt:  # check every kind circle
+                for center in type_cercle:
+                    k = np.sqrt(np.square(center[1][0] - cx) + np.square(
+                    center[1][1] - cy))  # don't consider cercles very close to cercles already found
+                    if k < 20:
+                        flag_closeness = 1
+                        break
+
+            if flag_closeness == 0:
+                rect_covering_cercle = cv2.minAreaRect(cnt) # TODO: Check if better "cnt" or "approx"
+                box_cercle = cv2.boxPoints(rect_covering_cercle)
+                box_cercle = np.int0(box_cercle)
+                size_crop = 64
+                # Make perspective transformation
+                dst = np.array([
+                    [0, 0],
+                    [size_crop - 1, 0],
+                    [size_crop - 1, size_crop - 1],
+                    [0, size_crop - 1]], dtype="float32")
+
+                # compute the perspective transform matrix and then apply it
+                M = cv2.getPerspectiveTransform(box_cercle.astype(np.float32), dst)
+                warped_cercle = cv2.warpPerspective(imgOri, M, (size_crop, size_crop)) # TODO: Check if requires RGB or BGR
+
+                type = classify_nn("cercle", warped_cercle)
+                if type != "CRAP":
+                    cirCnt[flag-1].extend([[box_cercle, (cx, cy), type]])  # save ellipse center and size
+                    cv2.imwrite('results/cercle/' + str(index_cercle) + 'cercle.jpg', warped_cercle)
+                    index_cercle = index_cercle + 1
+
+
+
+
+# TODO: Put the directory of the image
+imgOri = cv2.imread('images_mine/2106.png')  # RGB space imput image
+
+# ------------------Filter--------------------------------------------------- #
+img = cv2.bilateralFilter(imgOri, 10, 75, 75)
+
+# -------------- Find & Draw Contour ---------------------------------------- #
+gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+# two different thresh, canny has better result ( !!! maybe try other edge detection)
+thresh = 50
+binaryImg = cv2.Canny(gray, thresh, 2*thresh)
+contours = cv2.findContours(binaryImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[1] #modification to work in OpenCV 3.4
+contours = [contours[i] for i in range(len(contours)) if
+                     cv2.contourArea(contours[i]) > 300]  # be sure the have a certain area
+# TODO: Check if convexity matters
+#contours = [contours[i] for i in range(len(contours)) if cv2.isContourConvex(contours[i])]
+
+index = 0 # where we keep count of the valid shapes found
+num_classes = 15
+size_crop = 64
 
 # ------------- Shape detection ------------------------------------------ #
 triCnt = []
+blueCnt = []
 rectCnt = []
-cirCnt = [[], [], []]  # bule circle, red & yellow circle, red & bule circle
+cirCnt = [[], [], []]  # blue circle, red & yellow circle, red & blue circle
+# Import my model
+model_rectangle = create_model(3)
+model_rectangle.load_weights("./model/model_rectangle.h5")
+#-----------------------------
+model_triangle = create_model(7)
+model_triangle.load_weights("./model/model_triangle.h5")
+#-----------------------------
+model_cercle = create_model(7)
+model_cercle.load_weights("./model/model_cercle.h5")
+
+labels_index = { 0 : "follow_left", 1 : "airport", 2 : "follow_right", 3 : "residential", 4 : "no_stopping_and_parking",
+                 5 : "no_parking", 6 : "stop", 7 : "no_bicycle", 8 : "junction", 9 : "dangerous_curve_left",
+                 10: "road_narrows_from_left", 11: "road_narrows_from_right", 12: "dangerous_curve_right",
+                 13: "roundabout_warning", 14: "no_heavy_truck"}
+labels_rectangle = {0 : "airport", 1 : "residential", 2 : "CRAP"}
+labels_triangle = {0 : "dangerous_curve_left", 1 : "dangerous_curve_right", 2 : "junction", 3 : "road_narrows_from_left",
+                   4 : "road_narrows_from_right", 5 : "roundabout_warning", 6 : "CRAP"}
+labels_cercle = {0 : "follow_left", 1 : "follow_right", 2 : "no_bicycle", 3 : "no_heavy_truck",
+                   4 : "no_parking", 5 : "no_stopping_and_parking", 6 : "stop"}
+
+index_cercle = 0
+index_triangle = 0
+index_rectangle = 0
+
 for cnt in contours:
-    triCnt = detectTri(cnt, triCnt)
-    #rectCnt = detectRect(cnt, rectCnt)
-    cirCent = detectCir(cnt, cirCnt)
+    detect_cercle(cnt)
+    detect_rectangle(cnt)
+    detect_triangle(cnt)
 
 
+# IN CASE CERCLE ARE CLOSE TO RECTANGLE JUST SAVE CERCLE
+for species in cirCnt:  # check every kind circle
+    for center_circle in species:  # check repeat contour
+        for center_rect in rectCnt:
+            k = np.sqrt(np.square(center_rect[1][0] - center_circle[0][0][0]) + np.square(
+                center_rect[1][1] - center_circle[0][0][1]))
+            if k < 20:
+                rectCnt = [x for x in rectCnt if not (x[0] == center_rect[0]).all()]
+
+for cnt in rectCnt:
+    cv2.drawContours(img, [cnt[0]], -1, (255, 255, 0), 2)
+    cv2.putText(img, cnt[2], cnt[1], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+for cnt in cirCnt:
+    for cercle_type in cnt:
+        cv2.drawContours(img, [cercle_type[0]], -1, (255, 255, 0), 2)
+        cv2.putText(img, cercle_type[2], cercle_type[1], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+for cnt in triCnt:
+    cv2.drawContours(img, [cnt[0]], -1, (255, 255, 0), 2)
+    cv2.putText(img, cnt[2], cnt[1], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 cv2.imshow('img', img)
 cv2.waitKey(0)
