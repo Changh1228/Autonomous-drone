@@ -43,16 +43,10 @@ def read_from_json(m):
     return t
 
 
-rospy.init_node('localization')
-sub_goal = rospy.Subscriber('/aruco/markers', MarkerArray, transform_callback)
-tf_buf   = tf2_ros.Buffer()
-tf_lstn  = tf2_ros.TransformListener(tf_buf)
-
-
 def pre_aruco(aruco_queue):
     '''preprocess the data form camera: delete the outlier and choose nearest markers'''
     k = len(aruco_queue)
-    if k < 6:  # if nothing in queue, quit
+    if k < 6:  # if no enough data in queue, quit
         return None, None
     # choose nearest marker
     record = np.zeros(16)
@@ -62,7 +56,7 @@ def pre_aruco(aruco_queue):
         for aruco in data.markers:  # for all markers
             if aruco.id > 15:
                 continue
-            d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2)
+            d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
             if d_now < d:
                 d = d_now  # max distance and its ID
                 id = aruco.id
@@ -135,8 +129,11 @@ def pre_aruco(aruco_queue):
     return result, nearest_ID
 
 
+def localization(argv):
 
-def main(argv=sys.argv):
+    tf_buf   = tf2_ros.Buffer()
+    tf_lstn  = tf2_ros.TransformListener(tf_buf)
+
     global aruco_queue
     d_buf = None
     yaw_buf = None
@@ -153,7 +150,7 @@ def main(argv=sys.argv):
 	aruco_map_pose = {m["id"]: read_from_json(m) for m in world['markers']}
 
     rate = rospy.Rate(10)  # Hz
-    print('running')
+    print('localization running')
     t = 0 # flag of average
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
@@ -164,7 +161,7 @@ def main(argv=sys.argv):
         if (aruco_marker.header.stamp.secs - rospy.Time.now().secs) > 2:  # data form 2s before, reject
             continue
 
-    # ---------------do localization ----------------
+        # ---------------do localization ----------------
         # transform pose in camera link to odm link
         if not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp):
             rospy.logwarn_throttle(5.0, 'No transform from %s to cf1/odom' % aruco_marker.header.frame_id)
@@ -202,13 +199,6 @@ def main(argv=sys.argv):
         T_m2o[2][3] = 0
 
         (roll, pitch, yaw) = euler_from_matrix(T_m2o, 'rxyz')
-
-        '''print("T_o2a")
-        print(T_o2a)
-        print("T_m2a")
-        print(T_m2a)
-        print("T_m2o")
-        print(T_m2o)'''
 
         # cal time average
         queue.append([position_x, position_y, yaw])
@@ -250,15 +240,25 @@ def main(argv=sys.argv):
             tfO2M.transform.rotation.z = orientation_z
             tfO2M.transform.rotation.w = orientation_w
             br.sendTransform(tfO2M)
-            print("publish tf")
+            '''print("publish tf")
             print("timeAve_yaw = %f" % yaw)
             print("timeAve_x = %f" % position_x)
-            print("timeAve_y = %f" % position_y)
+            print("timeAve_y = %f" % position_y)'''
             d_buf = [position_x, position_y, yaw]
             aruco_queue.clear()
             t = 0
         t += 1
         rate.sleep()
+
+
+
+def main(argv=sys.argv):
+
+    rospy.init_node('localization', anonymous=True)
+    rospy.Subscriber('/aruco/markers', MarkerArray, transform_callback)
+
+    localization(argv)
+
 
 if __name__ == '__main__':
     main()
