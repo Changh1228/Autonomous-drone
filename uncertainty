@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+import rospy
+import math
+from std_msgs.msg import Float64
+from aruco_msgs.msg import MarkerArray
+
+
+'''
+Uncertainty means how reliable is the localization is
+If no marker is seen, the uncertainty increase (faster if drone is moving)
+If find marker, the uncertainty decrease (faster if marker is nearer and drone moving slower)
+the region of unc is 0-100
+
+Note: havn't concern drone speed yet
+'''
+aruco_marker = None
+
+
+def unc_callback(data):
+    global aruco_marker
+    aruco_marker = data
+
+
+def main():
+    global aruco_marker
+
+    rospy.init_node('uncertainty')
+    rospy.Subscriber('/aruco/markers', MarkerArray, unc_callback)
+    pub = rospy.Publisher('/localization/unc', Float64, queue_size=10)
+    rate = rospy.Rate(10) # 10hz
+    print('Uncertainty running')
+
+    uncertainty = 0
+    while not rospy.is_shutdown():
+        if aruco_marker == None:
+            # when starting no marker is updated, uncertainty is large
+            uncertainty = 100
+            pub.publish(100.0)
+            continue
+        else:
+            # find nearest aruco
+            d = 10000
+            id = None
+            for aruco in aruco_marker.markers:  # for all markers
+                if aruco.id > 15:
+                    continue
+                d_now = math.sqrt(pow(aruco.pose.pose.position.x, 2) +
+                                  pow(aruco.pose.pose.position.y, 2) +
+                                  pow(aruco.pose.pose.position.z, 2))
+                if d_now < d:
+                    d = d_now  # max distance and its ID
+                    id = aruco.id
+            delta_t = rospy.Time.now().secs - aruco_marker.header.stamp.secs
+            if delta_t > 1:
+                uncertainty += 5
+            else:
+                uncertainty -= 10 / d
+
+            if uncertainty < d*10:
+                uncertainty = d*10
+            elif uncertainty > 100:
+                uncertainty = 100
+            
+            pub.publish(uncertainty)
+        rate.sleep()
+
+
+
+if __name__ == '__main__':
+    main()
