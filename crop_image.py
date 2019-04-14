@@ -464,7 +464,7 @@ def detect_cercle(cnt):
 
 
 # TODO: Put the directory of the image
-imgOri = cv2.imread('images_mine/2106.png')  # RGB space imput image
+imgOri = cv2.imread('images_mine/1476.png')  # RGB space imput image
 
 # ------------------Filter--------------------------------------------------- #
 img = cv2.bilateralFilter(imgOri, 10, 75, 75)
@@ -523,8 +523,8 @@ for cnt in contours:
 for species in cirCnt:  # check every kind circle
     for center_circle in species:  # check repeat contour
         for center_rect in rectCnt:
-            k = np.sqrt(np.square(center_rect[1][0] - center_circle[0][0][0]) + np.square(
-                center_rect[1][1] - center_circle[0][0][1]))
+            k = np.sqrt(np.square(center_rect[1][0] - center_circle[1][0]) + np.square(
+                center_rect[1][1] - center_circle[1][1]))
             if k < 20:
                 rectCnt = [x for x in rectCnt if not (x[0] == center_rect[0]).all()]
 
