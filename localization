@@ -54,7 +54,7 @@ def pre_aruco(aruco_queue):
         d = 10000
         id = None
         for aruco in data.markers:  # for all markers
-            if aruco.id > 15:
+            if aruco.id > 15 or aruco.id < 1:
                 continue
             d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
             if d_now < d:
@@ -217,12 +217,18 @@ def localization(argv):
         timeAve_yaw /= k
 
         if not d_buf:
-            d_buf = [0, 0, 0]  # x, y, yaw of last tf
+            d_buf = [0, 0, 0, 0]  # x, y, yaw of last tf
 
         step_d = math.sqrt(pow(timeAve_x - d_buf[0], 2) + pow(timeAve_y - d_buf[1], 2))
         step_yaw = math.degrees(abs(timeAve_yaw - d_buf[2]))
 
-        if (step_d > 0.1 or step_yaw > 5) and t >= queue_len:
+        # change threshoold when detect deferent marker
+        if d_buf[3] == aruco_ID:
+            threshold = [0.1, 5]
+        else:
+            threshold = [0.5, 10]
+
+        if (step_d > threshold[0] or step_yaw > threshold[1]) and t >= queue_len:
             (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.000001,
                                                                                                  0.000001,
                                                                                                  timeAve_yaw)
@@ -244,7 +250,7 @@ def localization(argv):
             print("timeAve_yaw = %f" % yaw)
             print("timeAve_x = %f" % position_x)
             print("timeAve_y = %f" % position_y)'''
-            d_buf = [position_x, position_y, yaw]
+            d_buf = [position_x, position_y, yaw, aruco_ID]
             aruco_queue.clear()
             t = 0
         t += 1
