@@ -7,9 +7,10 @@ import json
 import a_star
 import tf2_ros
 import tf2_geometry_msgs
-from tf.transformations import euler_from_quaternion
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from geometry_msgs.msg import PoseStamped, Point
 from crazyflie_driver.msg import Position
+from aruco_msgs.msg import MarkerArray, Marker
 
 class DroneMovement:
     command_publisher = None
@@ -25,6 +26,7 @@ class DroneMovement:
     g = [0.00, -0.75, 45]
     h = [1.00, 0.25, 45]
     path = [a, b, c, d, e, f, g, h]
+    path_ids = []
 
     current_target = 0
     goal = Point(0, 0, 0.4)
@@ -32,9 +34,13 @@ class DroneMovement:
     checkpoints = []
     checkpoints_yaw = []
 
-    threshold = 0.075
+    detected_arucos = []
 
-    clearance_distance = 0.5
+    threshold = 0.075
+    degree_threshold = 10
+
+    clearance_distance = 0.75
+    centered = False
     passing_gate = False
 
     def __init__(self, argv=sys.argv):
@@ -44,6 +50,7 @@ class DroneMovement:
         self.command_publisher  = rospy.Publisher("/cf1/cmd_position", Position, queue_size=2)
         
         rospy.Subscriber("/cf1/pose", PoseStamped, self.target_handler)
+        rospy.Subscriber("/aruco/markers", MarkerArray, self.aruco_detected)
         rospy.loginfo("Subscribing to the /cf1/pose topic")
 
         self.tf_buf = tf2_ros.Buffer()
@@ -58,6 +65,7 @@ class DroneMovement:
 
         # Create a checkpoint in front of each gate
         self.path = [[g["position"][0] + self.clearance_distance / 2 * np.cos(np.deg2rad(180 + g["heading"])), g["position"][1] + self.clearance_distance / 2 * np.sin(np.deg2rad(180 + g["heading"])), g["heading"]] for g in world['gates']]
+        self.path_ids = [g["id"] for g in world['gates']]
 
     def distance(self, a, b):
         if (a == b):
@@ -80,7 +88,10 @@ class DroneMovement:
         target.z = self.goal.z
         target.yaw = self.goal_yaw
 
-        self.command_publisher.publish(target)            
+        self.command_publisher.publish(target)
+
+    def aruco_detected(self, msg):
+        self.detected_arucos = msg.markers
 
     def target_handler(self, msg):
         roll, pitch, yaw = euler_from_quaternion((msg.pose.orientation.x,
@@ -90,7 +101,11 @@ class DroneMovement:
         
         yaw = math.degrees(yaw)
 
-        if self.goal.x + self.threshold > msg.pose.position.x > self.goal.x -self.threshold and self.goal.y + self.threshold > msg.pose.position.y > self.goal.y - self.threshold and self.goal.z + self.threshold > msg.pose.position.z > self.goal.z - self.threshold:
+        anglediff = (yaw - self.goal_yaw + 180 + 360) % 360 - 180
+
+        print(self.goal_yaw)
+
+        if self.goal.x + self.threshold > msg.pose.position.x > self.goal.x - self.threshold and self.goal.y + self.threshold > msg.pose.position.y > self.goal.y - self.threshold and self.goal.z + self.threshold > msg.pose.position.z > self.goal.z - self.threshold and anglediff <= self.degree_threshold and anglediff >= -self.degree_threshold:
             idx = self.checkpoints.index(self.goal) if self.goal in self.checkpoints else -1
             if idx != -1 and idx < len(self.checkpoints) - 1:
                 #self.goal = self.checkpoints[idx + 1]
@@ -106,6 +121,8 @@ class DroneMovement:
                 target.pose.position.y = self.checkpoints[idx + 1].y
                 target.pose.position.z = self.checkpoints[idx + 1].z
 
+                # target.pose.orientation.x, target.pose.orientation.y, target.pose.orientation.z, target.pose.orientation.w = quaternion_from_euler(0, 0, math.radians(self.checkpoints_yaw[idx + 1]))
+
                 if not self.tf_buf.can_transform('cf1/odom', 'map', target.header.stamp):
                     rospy.logwarn_throttle(5.0, 'No transform from map to odom')
                     return
@@ -115,10 +132,37 @@ class DroneMovement:
                 self.checkpoints[idx + 1] = self.goal
                 self.goal_yaw = self.checkpoints_yaw[idx + 1]
             else:
-                if self.passing_gate:
+                if not self.centered and self.passing_gate:
+                    id = self.path_ids[self.current_target]
+
+                    for marker in self.detected_arucos:
+                        if marker.id == id:
+                            if not self.tf_buf.can_transform('cf1/odom', 'cf1/camera_link', marker.header.stamp):
+                                rospy.logwarn_throttle(5.0, 'No transform from cf1/camera_link to odom')
+                                return
+
+                            aruco = PoseStamped()
+
+                            aruco.header.stamp = marker.header.stamp
+                            aruco.header.frame_id = 'cf1/odom'
+
+                            aruco.pose.position.x = marker.pose.pose.position.x
+                            aruco.pose.position.y = marker.pose.pose.position.y
+                            aruco.pose.position.z = marker.pose.pose.position.z
+
+                            aruco_odom = self.tf_buf.transform(aruco, 'map')
+
+                            centered_x = aruco_odom.pose.position.x + self.clearance_distance / 2 * np.cos(np.deg2rad(180 + self.path[self.current_target][2]))
+                            centered_y = aruco_odom.pose.position.y + self.clearance_distance / 2 * np.sin(np.deg2rad(180 + self.path[self.current_target][2]))
+                            
+                            self.goal = Point(centered_x, centered_y, 0.4)
+                            self.centered = True
+                    
+                elif self.passing_gate and self.centered:
                     angle_to_pass_gate = np.deg2rad(self.path[self.current_target][2])
                     self.goal = Point(msg.pose.position.x + self.clearance_distance * np.cos(angle_to_pass_gate), msg.pose.position.y + self.clearance_distance * np.sin(angle_to_pass_gate), 0.4)
                     self.current_target = self.current_target + 1
+                    self.centered = False
                     self.passing_gate = False
                 else:
                     path_x, path_y = a_star.aStarPlanning(msg.pose.position.x, msg.pose.position.y, self.path[self.current_target][0], self.path[self.current_target][1])
@@ -128,7 +172,14 @@ class DroneMovement:
 
                     for i in range(len(path_x)):
                         self.checkpoints.append(Point(path_x[i], path_y[i], 0.4))
-                        self.checkpoints_yaw.append(path_yaw[i])
+                        if i == len(path_x) - 1:
+                            self.checkpoints_yaw.append(self.path[0][2])
+                        else:
+                            self.checkpoints_yaw.append(path_yaw[i])
+
+                    print("yaw")
+                    print(self.checkpoints_yaw[-1])
+                    print("----")
                     
                     '''
                     yaw_increment = self.distance(yaw, self.path[self.current_target][2]) / len(path_x)
@@ -160,6 +211,7 @@ class DroneMovement:
                     self.checkpoints[0] = self.goal
                     self.goal_yaw = self.checkpoints_yaw[0]
 
+                    self.centered = False
                     self.passing_gate = True
 
 if __name__ == "__main__":
