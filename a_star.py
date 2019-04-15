@@ -28,9 +28,9 @@ def calObsWall(sx, sy, ex, ey, obsMap, reso):
     ex, ey end point of the wall
     '''
     xMin = int(min(sx, ex) / reso)  # Ex. 3.2-> 3
-    xMax = math.ceil(max(sx, ex) / reso)  # Ex. 3.2-> 4
+    xMax = int(math.ceil(max(sx, ex) / reso))  # Ex. 3.2-> 4
     yMin = int(min(sy, ey) / reso)
-    yMax = math.ceil(max(sy, ey) / reso)
+    yMax = int(math.ceil(max(sy, ey) / reso))
     xWidth = xMax - xMin  # number of grid
     yWidth = yMax - yMin
 
@@ -48,7 +48,7 @@ def calObsWall(sx, sy, ex, ey, obsMap, reso):
         for iy in range(yWidth):
             y = (iy + yMin) * reso  # (x,y): position of each node
             d = abs(k * (x - sx) - (y - sy)) / math.sqrt(1 + k * k)
-            if d < 0.8 * reso:
+            if d < 1.2 * reso:
                 # if distance from node to obstacle less than 1.5, regard as occupied
                 obsMap[ix + xMin + 30][
                     iy + yMin +
@@ -62,7 +62,7 @@ def calObsGate(posx, posy, angle, obsMap, reso):
     angle: angle of gate
     '''
     angle = angle - 90  # orientation of the wall made by gate
-    gateSize = 0.6  # 60cm
+    gateSize = 0.8  # 60cm
     if angle < 0:
         angle = angle + 180
     if angle >= 180:
@@ -229,7 +229,7 @@ def yaw_planning(rx, ry):
     '''
     1. the yaw angle towards the next check point in route
     '''
-    t = len(rx)  # length of route
+    '''t = len(rx)  # length of route
     yaw = np.array([None for i in range(t)])
     for i in range(t):
         if i + 1 == t:  # the last one use the yaw from previous one
@@ -251,12 +251,93 @@ def yaw_planning(rx, ry):
     r_yaw[t - 1] = yaw[t - 1]
     for i in range(t - 2):  # conv filter
         r_yaw[i + 1] = 0.5 * yaw[i] + yaw[i + 1] + 0.5 * yaw[i + 2]
-        r_yaw[i + 1] /= 2
+        r_yaw[i + 1] /= 2'''
 
-    return r_yaw
+    '''
+    2 choose the most possible marker to see
+    '''
+    # pose of marker [x, y, z, roll, pitch, yaw]
+    marker = [[ 1.25, -0.50, 0.10, 0.0, -90.0, -135.0],
+              [ 0.25,  0.50, 0.10, 0.0, -90.0, -135.0],
+              [-1.50,  1.00, 0.10, 0.0, -90.0,  -90.0],
+              [-3.00,  0.50, 0.10, 0.0, -90.0,  -90.0],
+              [-2.50, -0.75, 0.10, 0.0, -90.0,    0.0],
+              [-1.50, -0.75, 0.10, 0.0, -90.0,   90.0],
+              [ 0.25, -0.50, 0.10, 0.0, -90.0,  135.0],
+              [ 1.25,  0.50, 0.10, 0.0, -90.0,  135.0],
+              [-2.00,  0.00, 0.00, 90.0,  0.0,    0.0],
+              [-2.50,  0.50, 0.00, 90.0,  0.0,    0.0],
+              [-1.50,  0.50, 0.00, 90.0,  0.0,    0.0],
+              [-0.50,  0.50, 0.00, 90.0,  0.0,    0.0],
+              [-0.50,  0.00, 0.00, 90.0,  0.0,    0.0],
+              [ 2.00,  0.00, 0.00, 90.0,  0.0,    0.0]]
+
+    t = len(rx)  # length of route
+    yaw = np.array([None for k in range(t)])
+    for i in range(t):
+        id = None
+        j = 0
+        buf = np.array([None for k in range(15)])
+        # choose nearest marker
+        d_buf = 1000
+        for aruco in marker:
+            flag = 0
+            #check if there are any obs between marker and drone
+            # (not do now, Future if needed)'''
+            dx = aruco[0] - rx[i]
+            dy = aruco[1] - ry[i]
+            d = math.sqrt(dx**2 + dy**2)
+            if d == 0:
+                print(d)
+                d = 0.0001
+
+            dx /= d  # normalize
+            dy /= d
+
+            # cal degree from drone to marker
+            if dy >= 0:
+                degree = math.degrees(math.acos(dx))
+            else:
+                degree = 360 - math.degrees(math.acos(dx))
+            if aruco[4] == -90:  # vertical markers
+                if abs(degree - aruco[5]) > 60:
+                    flag = 1
+                    continue
+
+            # for all markers, distance should be in proper range
+            if d < 0.4 or d > 1.5:
+                flag = 1
+                continue
+            if flag==0:
+                buf[j] = degree
+
+                if d < d_buf:
+                    id = j
+                    d_buf = d
+            j += 1
+
+        # don't find useful marker
+        if id == None:
+            print("don't find")
+            dx = rx[i] - rx[i-1]
+            dy = ry[i] - ry[i-1]
+            d = math.sqrt(dx**2 + dy**2)
+            dx /= d  # normalize
+            dy /= d
+            if dy >= 0:
+                yaw[i] = math.degrees(math.acos(dx))
+            else:
+                yaw[i] = 360 - math.degrees(math.acos(dx))
+        # save the nearest marker and yaw
+        yaw[i] = buf[id]
+        print(id)
+    return yaw
 
 
 rx, ry = aStarPlanning(1.0, 0.0, -3.0, 1.5)
-r_yaw = yaw_planning(rx, ry)
+ryaw = yaw_planning(rx, ry)
+print(rx)
+print(ry)
+print(ryaw)
 plt.plot(rx, ry, "-r")
 plt.show()
