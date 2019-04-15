@@ -93,10 +93,9 @@ class DroneMovement:
         if self.goal.x + self.threshold > msg.pose.position.x > self.goal.x -self.threshold and self.goal.y + self.threshold > msg.pose.position.y > self.goal.y - self.threshold and self.goal.z + self.threshold > msg.pose.position.z > self.goal.z - self.threshold:
             idx = self.checkpoints.index(self.goal) if self.goal in self.checkpoints else -1
             if idx != -1 and idx < len(self.checkpoints) - 1:
-                self.goal = self.checkpoints[idx + 1]
-                self.goal_yaw = self.checkpoints_yaw[idx + 1]
+                #self.goal = self.checkpoints[idx + 1]
+                #self.goal_yaw = self.checkpoints_yaw[idx + 1]
 
-                '''
                 # Need to tell TF that the goal was just generated
                 target = PoseStamped()
 
@@ -107,14 +106,14 @@ class DroneMovement:
                 target.pose.position.y = self.checkpoints[idx + 1].y
                 target.pose.position.z = self.checkpoints[idx + 1].z
 
-                if not self.tf_buf.can_transform('map', 'cf1/odom', target.header.stamp):
+                if not self.tf_buf.can_transform('cf1/odom', 'map', target.header.stamp):
                     rospy.logwarn_throttle(5.0, 'No transform from map to odom')
                     return
 
                 goal_odom = self.tf_buf.transform(target, 'cf1/odom')
                 self.goal = Point(goal_odom.pose.position.x, goal_odom.pose.position.y, goal_odom.pose.position.z)
+                self.checkpoints[idx + 1] = self.goal
                 self.goal_yaw = self.checkpoints_yaw[idx + 1]
-                '''
             else:
                 if self.passing_gate:
                     angle_to_pass_gate = np.deg2rad(self.path[self.current_target][2])
@@ -139,10 +138,9 @@ class DroneMovement:
                     '''
 
                     #print(self.checkpoints)
-                    self.goal = self.checkpoints[0]
-                    self.goal_yaw = self.checkpoints_yaw[0]
+                    #self.goal = self.checkpoints[0]
+                    #self.goal_yaw = self.checkpoints_yaw[0]
 
-                    '''
                     # Need to tell TF that the goal was just generated
                     target = PoseStamped()
 
@@ -153,14 +151,14 @@ class DroneMovement:
                     target.pose.position.y = self.checkpoints[0].y
                     target.pose.position.z = self.checkpoints[0].z
 
-                    if not self.tf_buf.can_transform('map', 'cf1/odom', target.header.stamp):
+                    if not self.tf_buf.can_transform('cf1/odom', 'map', target.header.stamp):
                         rospy.logwarn_throttle(5.0, 'No transform from map to odom')
                         return
 
                     goal_odom = self.tf_buf.transform(target, 'cf1/odom')
                     self.goal = Point(goal_odom.pose.position.x, goal_odom.pose.position.y, goal_odom.pose.position.z)
+                    self.checkpoints[0] = self.goal
                     self.goal_yaw = self.checkpoints_yaw[0]
-                    '''
 
                     self.passing_gate = True
 
