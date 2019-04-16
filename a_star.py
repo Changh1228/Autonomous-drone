@@ -28,9 +28,9 @@ def calObsWall(sx, sy, ex, ey, obsMap, reso):
     ex, ey end point of the wall
     '''
     xMin = int(min(sx, ex) / reso)  # Ex. 3.2-> 3
-    xMax = math.ceil(max(sx, ex) / reso)  # Ex. 3.2-> 4
+    xMax = int(math.ceil(max(sx, ex) / reso))  # Ex. 3.2-> 4
     yMin = int(min(sy, ey) / reso)
-    yMax = math.ceil(max(sy, ey) / reso)
+    yMax = int(math.ceil(max(sy, ey) / reso))
     xWidth = xMax - xMin  # number of grid
     yWidth = yMax - yMin
 
@@ -345,9 +345,19 @@ def yaw_planning(rx, ry, obsMap, reso):
         else:
             # save the nearest marker and yaw
             yaw[i] = buf[id]
-    return yaw
+    if t > 3:
+        r_yaw = np.array([None for i in range(t)])
+        r_yaw[0] = yaw[0]
+        r_yaw[t - 1] = yaw[t - 1]
+        for i in range(t - 2):  # conv filter
+            r_yaw[i + 1] =  yaw[i] + yaw[i + 1] + yaw[i + 2]
+            r_yaw[i + 1] /= 3
+        return r_yaw
+    else:
+        return yaw
 
 
-rx, ry, ryaw = aStarPlanning(0.0, 0.0, 1.7, -0.9)
-plt.plot(rx, ry, "-r")
-plt.show()
+#rx, ry, ryaw = aStarPlanning(-3.0, 1.5, 1.7, -0.9)
+#print(ryaw )
+#plt.plot(rx, ry, "-r")
+#plt.show()
