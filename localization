@@ -19,7 +19,6 @@ aruco_queue = deque(maxlen = 6)
 
 '''
 dangerous when yaw of drift close to 180 degree
-no uncertainty now
 '''
 
 def transform_callback(data):
@@ -149,6 +148,8 @@ def localization(argv):
     # Get pose of aruco in map frame (accurate)
 	aruco_map_pose = {m["id"]: read_from_json(m) for m in world['markers']}
 
+    # save initial tf
+
     rate = rospy.Rate(10)  # Hz
     print('localization running')
     t = 0 # flag of average
@@ -157,15 +158,34 @@ def localization(argv):
         aruco_marker, aruco_ID = pre_aruco(copy.deepcopy(aruco_queue))
 
         if aruco_marker == None:  # no enough data form queue
+            # don't find any marker, publish init one
+            br = tf2_ros.TransformBroadcaster()
+            tf_init.header.stamp = rospy.Time.now()
+            br.sendTransform(tf_init)
+            tf_init = TransformStamped()
+            tf_init.header.stamp = rospy.Time.now()
+            tf_init.header.frame_id = "map"
+            tf_init.child_frame_id = "cf1/odom"
+            tf_init.transform.translation.x = -0.5
+            tf_init.transform.translation.y = -0.5
+            tf_init.transform.translation.z = 0.0
+            tf_init.transform.rotation.x = 0.000001
+            tf_init.transform.rotation.y = 0.000001
+            tf_init.transform.rotation.z = 0.000001
+            tf_init.transform.rotation.w = 0.000001
             continue
-        if (aruco_marker.header.stamp.secs - rospy.Time.now().secs) > 2:  # data form 2s before, reject
+        if (aruco_marker.header.stamp.secs - rospy.Time.now().secs) > 2:  # data form 2s before, publish what we have in buf
+            br = tf2_ros.TransformBroadcaster()
+            tfO2M.header.stamp = rospy.Time.now()
+            br.sendTransform(tfO2M)
             continue
 
         # ---------------do localization ----------------
         # transform pose in camera link to odm link
         if not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp):
             rospy.logwarn_throttle(5.0, 'No transform from %s to cf1/odom' % aruco_marker.header.frame_id)
-            aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(1.0))
+            continue
+            #aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(1.0))
         #else:
         aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom')
 
@@ -219,48 +239,45 @@ def localization(argv):
         if not d_buf:
             d_buf = [0, 0, 0, 0]  # x, y, yaw of last tf
 
-        step_d = math.sqrt(pow(timeAve_x - d_buf[0], 2) + pow(timeAve_y - d_buf[1], 2))
-        step_yaw = math.degrees(abs(timeAve_yaw - d_buf[2]))
+        # step_d = math.sqrt(pow(timeAve_x - d_buf[0], 2) + pow(timeAve_y - d_buf[1], 2))
+        # step_yaw = math.degrees(abs(timeAve_yaw - d_buf[2]))
 
         # change threshoold when detect deferent marker
-        if d_buf[3] == aruco_ID:
-            threshold = [0.1, 5]
-        else:
-            threshold = [0.5, 10]
+        # if d_buf[3] == aruco_ID:
+        #     threshold = [0.1, 5]
+        # else:
+        #     threshold = [0.5, 10]
 
-        if (step_d > threshold[0] or step_yaw > threshold[1]) and t >= queue_len:
-            (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.000001,
-                                                                                                 0.000001,
-                                                                                                 timeAve_yaw)
-            # TF form odm to map
-            br = tf2_ros.TransformBroadcaster()
-            tfO2M = TransformStamped()
-            tfO2M.header.stamp = rospy.Time.now()
-            tfO2M.header.frame_id = "map"
-            tfO2M.child_frame_id = "cf1/odom"
-            tfO2M.transform.translation.x = timeAve_x
-            tfO2M.transform.translation.y = timeAve_y
-            tfO2M.transform.translation.z = 0.0
-            tfO2M.transform.rotation.x = orientation_x
-            tfO2M.transform.rotation.y = orientation_y
-            tfO2M.transform.rotation.z = orientation_z
-            tfO2M.transform.rotation.w = orientation_w
-            br.sendTransform(tfO2M)
-            '''print("publish tf")
-            print("timeAve_yaw = %f" % yaw)
-            print("timeAve_x = %f" % position_x)
-            print("timeAve_y = %f" % position_y)'''
-            d_buf = [position_x, position_y, yaw, aruco_ID]
-            aruco_queue.clear()
-            t = 0
-        t += 1
+        
+        (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.000001,
+                                                                                                0.000001,
+                                                                                                timeAve_yaw)
+        # TF form odm to map
+        # br = tf2_ros.TransformBroadcaster()
+        # tfO2M = TransformStamped()
+        # tfO2M.header.stamp = rospy.Time.now()
+        # tfO2M.header.frame_id = "map"
+        # tfO2M.child_frame_id = "cf1/odom"
+        # tfO2M.transform.translation.x = timeAve_x
+        # tfO2M.transform.translation.y = timeAve_y
+        # tfO2M.transform.translation.z = 0.0
+        # tfO2M.transform.rotation.x = orientation_x
+        # tfO2M.transform.rotation.y = orientation_y
+        # tfO2M.transform.rotation.z = orientation_z
+        # tfO2M.transform.rotation.w = orientation_w
+        # br.sendTransform(tfO2M)
+        '''print("publish tf")
+        print("timeAve_yaw = %f" % yaw)
+        print("timeAve_x = %f" % position_x)
+        print("timeAve_y = %f" % position_y)'''
+        d_buf = [timeAve_x, timeAve_y, timeAve_yaw, aruco_ID]
+        aruco_queue.clear()
         rate.sleep()
-
-
 
 def main(argv=sys.argv):
 
     rospy.init_node('localization', anonymous=True)
+
     rospy.Subscriber('/aruco/markers', MarkerArray, transform_callback)
 
     localization(argv)
