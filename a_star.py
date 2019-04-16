@@ -48,7 +48,7 @@ def calObsWall(sx, sy, ex, ey, obsMap, reso):
         for iy in range(yWidth):
             y = (iy + yMin) * reso  # (x,y): position of each node
             d = abs(k * (x - sx) - (y - sy)) / math.sqrt(1 + k * k)
-            if d < 0.8 * reso:
+            if d < 1.5 * reso:
                 # if distance from node to obstacle less than 1.5, regard as occupied
                 obsMap[ix + xMin + 30][
                     iy + yMin +
@@ -62,7 +62,7 @@ def calObsGate(posx, posy, angle, obsMap, reso):
     angle: angle of gate
     '''
     angle = angle - 90  # orientation of the wall made by gate
-    gateSize = 0.6  # 60cm
+    gateSize = 0.8  # 60cm +40 free space
     if angle < 0:
         angle = angle + 180
     if angle >= 180:
