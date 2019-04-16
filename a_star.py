@@ -48,11 +48,9 @@ def calObsWall(sx, sy, ex, ey, obsMap, reso):
         for iy in range(yWidth):
             y = (iy + yMin) * reso  # (x,y): position of each node
             d = abs(k * (x - sx) - (y - sy)) / math.sqrt(1 + k * k)
-            if d < 1.5 * reso:
+            if d < 1.0 * reso:
                 # if distance from node to obstacle less than 1.5, regard as occupied
-                obsMap[ix + xMin + 30][
-                    iy + yMin +
-                    20] = True  # move the zero points(need to change if the airspace change)
+                obsMap[ix + xMin + 40][iy + yMin + 20] = True  # move the zero points(need to change if the airspace change)
     return obsMap
 
 
@@ -62,7 +60,7 @@ def calObsGate(posx, posy, angle, obsMap, reso):
     angle: angle of gate
     '''
     angle = angle - 90  # orientation of the wall made by gate
-    gateSize = 0.8  # 60cm +40 free space
+    gateSize = 0.8  # 60cm
     if angle < 0:
         angle = angle + 180
     if angle >= 180:
@@ -131,8 +129,7 @@ def verifyNode(node, obmap, reso):
     elif node.y >= (airSpace[1][1] / reso):
         return False
 
-    if obmap[node.x + 30][node.y +
-                          20]:  # (need to change if the airspace change)
+    if obmap[node.x + 40][node.y + 20]:  # (need to change if the airspace change)
         return False
 
     return True
@@ -166,7 +163,7 @@ def aStarPlanning(sx, sy, gx, gy):
     for x in range(60):
         for y in range(40):
             if obsMap[x][y]:
-                plt.plot(x * 0.1 - 3, y * 0.1 - 2, ".k")
+                plt.plot(x * 0.1 - 4, y * 0.1 - 2, ".k")
     plt.plot(sx, sy, "xr")
     plt.plot(gx, gy, "xb")
     plt.grid(True)
@@ -181,9 +178,7 @@ def aStarPlanning(sx, sy, gx, gy):
     openSet[calIndex(nstart, reso)] = nstart
 
     while 1:
-        cId = min(
-            openSet,
-            key=lambda o: openSet[o].cost + calHeuristic(ngoal, openSet[o]))
+        cId = min(openSet, key=lambda o: openSet[o].cost + calHeuristic(ngoal, openSet[o]))
         current = openSet[cId]
 
         # show graph
@@ -222,41 +217,147 @@ def aStarPlanning(sx, sy, gx, gy):
                     openSet[nId] = node
 
     rx, ry = calc_final_path(ngoal, closeSet, reso)
-    return rx, ry
+    ryaw = yaw_planning(rx, ry, obsMap, reso)
+    return rx, ry, ryaw
 
 
-def yaw_planning(rx, ry):
+def yaw_planning(rx, ry, obsMap, reso):
     '''
     1. the yaw angle towards the next check point in route
     '''
+    # t = len(rx)  # length of route
+    # yaw = np.array([None for i in range(t)])
+    # for i in range(t):
+    #     if i + 1 == t:  # the last one use the yaw from previous one
+    #         yaw[i] = yaw[i - 1]
+    #         break
+
+    #     dx = rx[i + 1] - rx[i]
+    #     dy = ry[i + 1] - ry[i]
+    #     d = math.sqrt(dx**2 + dy**2)
+    #     dx /= d  # normalize
+    #     dy /= d
+
+    #     if dy >= 0:
+    #         yaw[i] = math.degrees(math.acos(dx))
+    #     else:
+    #         yaw[i] = 360 - math.degrees(math.acos(dx))
+    # r_yaw = np.array([None for i in range(t)])
+    # r_yaw[0] = yaw[0]
+    # r_yaw[t - 1] = yaw[t - 1]
+    # for i in range(t - 2):  # conv filter
+    #     r_yaw[i + 1] = 0.5 * yaw[i] + yaw[i + 1] + 0.5 * yaw[i + 2]
+    #     r_yaw[i + 1] /= 2
+    '''
+    2 choose the most possible marker to see
+    '''
+    # pose of marker [x, y, z, roll, pitch, yaw]
+    marker = [[1.25, -0.50, 0.10, 0.0, -90.0, -135.0],
+              [0.25, 0.50, 0.10, 0.0, -90.0, -135.0],
+              [-1.50, 1.00, 0.10, 0.0, -90.0, -90.0],
+              [-3.00, 0.50, 0.10, 0.0, -90.0, -90.0],
+              [-2.50, -0.75, 0.10, 0.0, -90.0, 0.0],
+              [-1.50, -0.75, 0.10, 0.0, -90.0, 90.0],
+              [0.25, -0.50, 0.10, 0.0, -90.0, 135.0],
+              [1.25, 0.50, 0.10, 0.0, -90.0, 135.0],
+              [-2.00, 0.00, 0.00, 90.0, 0.0, 0.0],
+              [-2.50, 0.50, 0.00, 90.0, 0.0, 0.0],
+              [-1.50, 0.50, 0.00, 90.0, 0.0, 0.0],
+              [-0.50, 0.50, 0.00, 90.0, 0.0, 0.0],
+              [-0.50, 0.00, 0.00, 90.0, 0.0, 0.0],
+              [2.00, 0.00, 0.00, 90.0, 0.0, 0.0]]
+
     t = len(rx)  # length of route
-    yaw = np.array([None for i in range(t)])
+    yaw = np.array([None for k in range(t)])
     for i in range(t):
-        if i + 1 == t:  # the last one use the yaw from previous one
-            yaw[i] = yaw[i - 1]
-            break
+        id = None
+        buf = np.array([None for k in range(15)])
+        # choose nearest marker
+        d_buf = 1000
+        for j in range(14):
+            flag = 0
 
-        dx = rx[i + 1] - rx[i]
-        dy = ry[i + 1] - ry[i]
-        d = math.sqrt(dx**2 + dy**2)
-        dx /= d  # normalize
-        dy /= d
+            dx = marker[j][0] - rx[i]
+            dy = marker[j][1] - ry[i]
+            d = math.sqrt(dx**2 + dy**2)
 
-        if dy >= 0:
-            yaw[i] = math.degrees(math.acos(dx))
+            # for all markers, distance should be in proper range
+            if d < 0.4 or d > 1.5:
+                flag = 1
+                continue
+
+            # cal degree from drone to marker range(0-360)
+            if d == 0:
+                d = 0.0001
+            dx /= d  # normalize
+            dy /= d
+            if dy >= 0:
+                degree = math.degrees(math.acos(dx))
+            else:
+                degree = 360 - math.degrees(math.acos(dx))
+
+            # check if there are any obs between marker and drone
+            # xMin = int(min(rx[i], marker[j][0]) / reso)  # Ex. 3.2-> 3
+            # xMax = math.ceil(max(rx[i], marker[j][0]) / reso)  # Ex. 3.2-> 4
+            # yMin = int(min(ry[i], marker[j][1]) / reso)
+            # yMax = math.ceil(max(ry[i], marker[j][1]) / reso)
+            # xWidth = xMax - xMin  # number of grid
+            # yWidth = yMax - yMin
+            # for ix in range(xWidth-1):
+            #     for iy in range(yWidth-1):
+            #         x = ix + xMin + 40
+            #         y = iy + yMin + 20
+            #         if obsMap[ix + xMin + 40][iy + yMin + 20] == True:
+            #             flag = 1
+            #             continue
+
+            # vertical markers
+            if marker[j][4] == -90:
+                angle = marker[j][5] + 90  # orientation of marker(+-180)
+                if angle > 180:
+                    angle -= 360
+
+                if abs(degree - 180 - angle) > 60:
+                    flag = 1
+                    continue
+                else:
+                    d -= 0.3  # give more privilage to vertical sign
+
+            if flag == 0:
+                buf[j] = degree
+                if d < d_buf:
+                    id = j
+                    d_buf = d
+
+        # if don't find ideal marker
+        if id is None:
+            print("don't find")
+            dx = rx[i] - rx[i - 1]
+            dy = ry[i] - ry[i - 1]
+            d = math.sqrt(dx**2 + dy**2)
+            dx /= d  # normalize
+            dy /= d
+            if dy >= 0:
+                yaw[i] = math.degrees(math.acos(dx))
+            else:
+                yaw[i] = 360 - math.degrees(math.acos(dx))
+
         else:
-            yaw[i] = 360 - math.degrees(math.acos(dx))
-    r_yaw = np.array([None for i in range(t)])
-    r_yaw[0] = yaw[0]
-    r_yaw[t - 1] = yaw[t - 1]
-    for i in range(t - 2):  # conv filter
-        r_yaw[i + 1] = 0.5 * yaw[i] + yaw[i + 1] + 0.5 * yaw[i + 2]
-        r_yaw[i + 1] /= 2
+            # save the nearest marker and yaw
+            yaw[i] = buf[id]
+    if t > 3:
+        r_yaw = np.array([None for i in range(t)])
+        r_yaw[0] = yaw[0]
+        r_yaw[t - 1] = yaw[t - 1]
+        for i in range(t - 2):  # conv filter
+            r_yaw[i + 1] =  yaw[i] + yaw[i + 1] + yaw[i + 2]
+            r_yaw[i + 1] /= 3
+        return r_yaw
+    else:
+        return yaw
 
-    return r_yaw
 
-
-#rx, ry = aStarPlanning(1.0, 0.0, -3.0, 1.5)
-#r_yaw = yaw_planning(rx, ry)
+#rx, ry, ryaw = aStarPlanning(-3.0, 1.5, 1.7, -0.9)
+#print(ryaw )
 #plt.plot(rx, ry, "-r")
 #plt.show()
