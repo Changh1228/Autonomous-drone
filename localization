@@ -152,12 +152,13 @@ def localization(argv):
 
     rate = rospy.Rate(10)  # Hz
     print('localization running')
-    t = 0 # flag of average
+
+    flag = 0  # flag for first running
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
         aruco_marker, aruco_ID = pre_aruco(copy.deepcopy(aruco_queue))
 
-        if aruco_marker == None:  # no enough data form queue
+        if aruco_marker == None or flag == 0:  # no enough data form queue
             # don't find any marker, publish init one
             (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.000001,
                                                                                                  0.000001,
@@ -175,12 +176,13 @@ def localization(argv):
             tf_init.transform.rotation.z = orientation_z
             tf_init.transform.rotation.w = orientation_w
             br.sendTransform(tf_init)
+            flag = 1
             #print("publish init tf")
             #print(tf_init)
             rate.sleep()
             continue
 
-        if (rospy.Time.now().secs - aruco_marker.header.stamp.secs) > 2:  # data form 1s before, publish what we have in buf
+        if (rospy.Time.now().secs - aruco_marker.header.stamp.secs) > 2 and flag==1:  # data form 1s before, publish what we have in buf
             (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.000001,
                                                                                                  0.000001,
                                                                                                  timeAve_yaw)
@@ -204,7 +206,7 @@ def localization(argv):
 
         # ---------------do localization ----------------
         # transform pose in camera link to odm link
-        if not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp):
+        if not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp) and flag==1:
             rospy.logwarn_throttle(5.0, 'No transform from %s to cf1/odom' % aruco_marker.header.frame_id)
             # can not do tf, publish the old one
             br = tf2_ros.TransformBroadcaster()
@@ -292,19 +294,20 @@ def localization(argv):
                                                                                              0.000001,
                                                                                              timeAve_yaw)
         # TF form odm to map
-        br = tf2_ros.TransformBroadcaster()
-        tfO2M = TransformStamped()
-        tfO2M.header.stamp = rospy.Time.now()
-        tfO2M.header.frame_id = "map"
-        tfO2M.child_frame_id = "cf1/odom"
-        tfO2M.transform.translation.x = timeAve_x
-        tfO2M.transform.translation.y = timeAve_y
-        tfO2M.transform.translation.z = 0.0
-        tfO2M.transform.rotation.x = orientation_x
-        tfO2M.transform.rotation.y = orientation_y
-        tfO2M.transform.rotation.z = orientation_z
-        tfO2M.transform.rotation.w = orientation_w
-        br.sendTransform(tfO2M)
+        if flag==1:  # already have a tf
+            br = tf2_ros.TransformBroadcaster()
+            tfO2M = TransformStamped()
+            tfO2M.header.stamp = rospy.Time.now()
+            tfO2M.header.frame_id = "map"
+            tfO2M.child_frame_id = "cf1/odom"
+            tfO2M.transform.translation.x = timeAve_x
+            tfO2M.transform.translation.y = timeAve_y
+            tfO2M.transform.translation.z = 0.0
+            tfO2M.transform.rotation.x = orientation_x
+            tfO2M.transform.rotation.y = orientation_y
+            tfO2M.transform.rotation.z = orientation_z
+            tfO2M.transform.rotation.w = orientation_w
+            br.sendTransform(tfO2M)
         #print("publish new tf")
         #print(tfO2M)
         d_buf = [timeAve_x, timeAve_y, timeAve_yaw, aruco_ID]
