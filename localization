@@ -15,7 +15,7 @@ from crazyflie_driver.msg import Position
 import copy
 from collections import deque
 
-aruco_queue = deque(maxlen = 6)
+aruco_queue = deque(maxlen = 10)
 
 '''
 dangerous when yaw of drift close to 180 degree
@@ -56,6 +56,11 @@ def pre_aruco(aruco_queue):
             if aruco.id > 15 or aruco.id < 1:
                 continue
             d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
+            if d_now < 0.2 or d_not > 1.5:  # check if marker in proper distance
+                continue
+            degree = math.atan2(aruco.pose.pose.position.x, aruco.pose.pose.position.z)
+            if degree < -0.65 or degree > 0.65:  # reject the marker in the edge of pic
+                continue
             if d_now < d:
                 d = d_now  # max distance and its ID
                 id = aruco.id
