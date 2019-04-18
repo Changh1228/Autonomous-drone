@@ -212,7 +212,7 @@ class DroneMovement:
         detected_position.yaw = yaw
 
         if self.goal is None:
-            self.plan_path(detected_position, self.path[0])
+            self.plan_path(detected_position, self.path[current_target])
         else:
             anglediff = (detected_position.yaw - self.goal.yaw + 180 + 360) % 360 - 180
 
