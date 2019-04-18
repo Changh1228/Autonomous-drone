@@ -90,9 +90,14 @@ def calMap(reso):
     # wall [sx, sy, ex, ey]
     wall = np.array([[-2.0, 2.0, -2.0, 0.25], [-2.0, 0.25, -1.0, 0.25]])
     # gate [x, y, angle]
-    gate = [[1.25, -0.50, 135.0], [0.25, 0.50, 135.0], [-1.50, 1.00, 180.0],
-            [-3.00, 0.50, 180], [-2.50, -0.75, -90.0], [-1.50, -0.75, 0.0],
-            [0.25, -0.50, 45.0], [1.25, 0.50, 45.0]]
+    gate = [[ 1.25, -0.50, 135.0],
+            [ 0.25,  0.50, 135.0],
+            [-1.50,  1.00, 180.0],
+            [-3.00,  0.50, 180.0],
+            [-2.50, -0.75, -90.0],
+            [-1.50, -0.75,   0.0],
+            [ 0.25, -0.50,  45.0],
+            [ 1.25,  0.50,  45.0]]
 
     for i in wall:
         obsMap = calObsWall(i[0], i[1], i[2], i[3], obsMap, reso)
@@ -217,11 +222,11 @@ def aStarPlanning(sx, sy, gx, gy):
                     openSet[nId] = node
 
     rx, ry = calc_final_path(ngoal, closeSet, reso)
-    ryaw = yaw_planning(rx, ry, obsMap, reso)
+    rx, ry, ryaw = yaw_planning(rx, ry, obsMap, reso)
     return rx, ry, ryaw
 
 
-def yaw_planning(rx, ry, obsMap, reso):
+def yaw_planning(x, y, obsMap, reso):
     '''
     1. the yaw angle towards the next check point in route
     '''
@@ -232,8 +237,8 @@ def yaw_planning(rx, ry, obsMap, reso):
     #         yaw[i] = yaw[i - 1]
     #         break
 
-    #     dx = rx[i + 1] - rx[i]
-    #     dy = ry[i + 1] - ry[i]
+    #     dx = x[i + 1] - x[i]
+    #     dy = y[i + 1] - y[i]
     #     d = math.sqrt(dx**2 + dy**2)
     #     dx /= d  # normalize
     #     dy /= d
@@ -252,33 +257,33 @@ def yaw_planning(rx, ry, obsMap, reso):
     2 choose the most possible marker to see
     '''
     # pose of marker [x, y, z, roll, pitch, yaw]
-    marker = [[1.25, -0.50, 0.10, 0.0, -90.0, -135.0],
-              [0.25, 0.50, 0.10, 0.0, -90.0, -135.0],
-              [-1.50, 1.00, 0.10, 0.0, -90.0, -90.0],
-              [-3.00, 0.50, 0.10, 0.0, -90.0, -90.0],
-              [-2.50, -0.75, 0.10, 0.0, -90.0, 0.0],
-              [-1.50, -0.75, 0.10, 0.0, -90.0, 90.0],
-              [0.25, -0.50, 0.10, 0.0, -90.0, 135.0],
-              [1.25, 0.50, 0.10, 0.0, -90.0, 135.0],
-              [-2.00, 0.00, 0.00, 90.0, 0.0, 0.0],
-              [-2.50, 0.50, 0.00, 90.0, 0.0, 0.0],
-              [-1.50, 0.50, 0.00, 90.0, 0.0, 0.0],
-              [-0.50, 0.50, 0.00, 90.0, 0.0, 0.0],
-              [-0.50, 0.00, 0.00, 90.0, 0.0, 0.0],
-              [2.00, 0.00, 0.00, 90.0, 0.0, 0.0]]
+    marker = [[ 1.25, -0.50, 0.10,  0.0, -90.0, -135.0],
+              [ 0.25,  0.50, 0.10,  0.0, -90.0, -135.0],
+              [-1.50,  1.00, 0.10,  0.0, -90.0,  -90.0],
+              [-3.00,  0.50, 0.10,  0.0, -90.0,  -90.0],
+              [-2.50, -0.75, 0.10,  0.0, -90.0,    0.0],
+              [-1.50, -0.75, 0.10,  0.0, -90.0,   90.0],
+              [ 0.25, -0.50, 0.10,  0.0, -90.0,  135.0],
+              [ 1.25,  0.50, 0.10,  0.0, -90.0,  135.0],
+              [-2.00,  0.00, 0.00, 90.0,   0.0,    0.0],
+              [-2.50,  0.50, 0.00, 90.0,   0.0,    0.0],
+              [-1.50,  0.50, 0.00, 90.0,   0.0,    0.0],
+              [-0.50,  0.50, 0.00, 90.0,   0.0,    0.0],
+              [-0.50,  0.00, 0.00, 90.0,   0.0,    0.0],
+              [ 2.00,  0.00, 0.00, 90.0,   0.0,    0.0]]
 
-    t = len(rx)  # length of route
-    yaw = np.array([None for k in range(t)])
+    t = len(x)  # length of route
+    yaw = [None for k in range(t)]
     for i in range(t):
         id = None
-        buf = np.array([None for k in range(15)])
+        buf = [None for k in range(15)]
         # choose nearest marker
         d_buf = 1000
         for j in range(14):
             flag = 0
 
-            dx = marker[j][0] - rx[i]
-            dy = marker[j][1] - ry[i]
+            dx = marker[j][0] - x[i]
+            dy = marker[j][1] - y[i]
             d = math.sqrt(dx**2 + dy**2)
 
             # for all markers, distance should be in proper range
@@ -297,10 +302,10 @@ def yaw_planning(rx, ry, obsMap, reso):
                 degree = 360 - math.degrees(math.acos(dx))
 
             # check if there are any obs between marker and drone
-            # xMin = int(min(rx[i], marker[j][0]) / reso)  # Ex. 3.2-> 3
-            # xMax = math.ceil(max(rx[i], marker[j][0]) / reso)  # Ex. 3.2-> 4
-            # yMin = int(min(ry[i], marker[j][1]) / reso)
-            # yMax = math.ceil(max(ry[i], marker[j][1]) / reso)
+            # xMin = int(min(x[i], marker[j][0]) / reso)  # Ex. 3.2-> 3
+            # xMax = math.ceil(max(x[i], marker[j][0]) / reso)  # Ex. 3.2-> 4
+            # yMin = int(min(y[i], marker[j][1]) / reso)
+            # yMax = math.ceil(max(y[i], marker[j][1]) / reso)
             # xWidth = xMax - xMin  # number of grid
             # yWidth = yMax - yMin
             # for ix in range(xWidth-1):
@@ -332,8 +337,8 @@ def yaw_planning(rx, ry, obsMap, reso):
         # if don't find ideal marker
         if id is None:
             print("don't find")
-            dx = rx[i] - rx[i - 1]
-            dy = ry[i] - ry[i - 1]
+            dx = x[i] - x[i - 1]
+            dy = y[i] - y[i - 1]
             d = math.sqrt(dx**2 + dy**2)
             dx /= d  # normalize
             dy /= d
@@ -345,16 +350,8 @@ def yaw_planning(rx, ry, obsMap, reso):
         else:
             # save the nearest marker and yaw
             yaw[i] = buf[id]
-    if t > 3:
-        r_yaw = np.array([None for i in range(t)])
-        r_yaw[0] = yaw[0]
-        r_yaw[t - 1] = yaw[t - 1]
-        for i in range(t - 2):  # conv filter
-            r_yaw[i + 1] =  yaw[i] + yaw[i + 1] + yaw[i + 2]
-            r_yaw[i + 1] /= 3
-        return r_yaw
-    else:
-        return yaw
+
+    return x, y, yaw
 
 
 #rx, ry, ryaw = aStarPlanning(-3.0, 1.5, 1.7, -0.9)

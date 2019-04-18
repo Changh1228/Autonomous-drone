@@ -39,7 +39,7 @@ class DroneMovement:
 
     goal = None
     last_position_command = None
-    current_target = 1
+    current_target = 0
     passing_gate = False
 
     checkpoints = []
@@ -80,13 +80,43 @@ class DroneMovement:
         self.checkpoints = []
 
         for i in range(len(path_x)):
-            checkpoint = Position()
-            checkpoint.x = path_x[i]
-            checkpoint.y = path_y[i]
-            checkpoint.z = 0.41
-            checkpoint.yaw = path_yaw[i]
+            if i + 1 < len(path_x):
+                diff = abs(path_yaw[i] - path_yaw[i + 1])
+                thresh = 30
+                step_size = 30
 
-            self.checkpoints.append(checkpoint)
+                if diff >= thresh:
+                    steps = int(diff / step_size)
+
+                    for s in range(steps):
+                        checkpoint = Position()
+                        checkpoint.x = path_x[i]
+                        checkpoint.y = path_y[i]
+                        checkpoint.z = 0.41
+
+                        if path_yaw[i] > path_yaw[i + 1]:
+                            checkpoint.yaw = path_yaw[i] - s * step_size
+                        else:
+                            checkpoint.yaw = path_yaw[i] + s * step_size
+
+                        self.checkpoints.append(checkpoint)
+
+                    if (diff % step_size) != 0:
+                        checkpoint = Position()
+                        checkpoint.x = path_x[i]
+                        checkpoint.y = path_y[i]
+                        checkpoint.z = 0.41
+                        checkpoint.yaw = path_yaw[i + 1]
+
+                        self.checkpoints.append(checkpoint)
+            else:
+                checkpoint = Position()
+                checkpoint.x = path_x[i]
+                checkpoint.y = path_y[i]
+                checkpoint.z = 0.41
+                checkpoint.yaw = path_yaw[i]
+
+                self.checkpoints.append(checkpoint)
         
         self.goal = self.checkpoints[0]
         self.passing_gate = True
@@ -182,7 +212,7 @@ class DroneMovement:
         detected_position.yaw = yaw
 
         if self.goal is None:
-            self.plan_path(detected_position, self.path[1])
+            self.plan_path(detected_position, self.path[0])
         else:
             anglediff = (detected_position.yaw - self.goal.yaw + 180 + 360) % 360 - 180
 
