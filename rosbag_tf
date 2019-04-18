@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+'''
+publish tf from base to odm in crazyfile
+'''
+import math
+import rospy
+import tf2_ros
+import tf2_geometry_msgs
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from geometry_msgs.msg import PoseStamped, TransformStamped
+from aruco_msgs.msg import MarkerArray
+from crazyflie_driver.msg import Position
+
+goal = None
+
+def transform_callback(data):
+    global goal
+    goal = data
+
+
+rospy.init_node('base_tf')
+rospy.Subscriber('cf1/pose', PoseStamped, transform_callback)
+tf_buf   = tf2_ros.Buffer()
+tf_lstn  = tf2_ros.TransformListener(tf_buf)
+
+
+def main():
+    global goal
+    rate = rospy.Rate(10)  # Hz
+    br = tf2_ros.TransformBroadcaster()
+
+    while not rospy.is_shutdown():
+        if goal != None:
+            # TF form base to odm
+            tfO2M = TransformStamped()
+            tfO2M.header.frame_id = "map"
+            tfO2M.child_frame_id = "cf1/base_link"
+            tfO2M.transform.translation = goal.pose.position
+            tfO2M.transform.rotation = goal.pose.orientation
+            tfO2M.header.stamp = rospy.Time.now()
+            br.sendTransform(tfO2M)
+        rate.sleep()
+
+
+if __name__ == '__main__':
+    main()
