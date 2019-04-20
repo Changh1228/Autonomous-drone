@@ -4,6 +4,7 @@ import rospy
 import cv2
 import math
 import numpy as np
+import csv
 
 from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage, Image
@@ -314,6 +315,8 @@ class ImageWorker:
         contours = [contours[i] for i in range(len(contours)) if
                     (cv2.contourArea(contours[i]) > 300 and cv2.contourArea(contours[i]) < 2400)]
 
+        list_loc_signs = []
+
         self.currentTri = [] # just to save the Triangles of this specific picture, empty for another picture
         self.currentRect = []
         self.currentCerc = []
@@ -337,29 +340,40 @@ class ImageWorker:
             #----------------------------
             sign_in_map = self.localizer_signs.find_location(cnt[1], cnt[0], queued_image.timestamp)
             if sign_in_map is not None:
-                self.sign_map_list.extend([[cnt[2], (sign_in_map.point.x, sign_in_map.point.y, sign_in_map.point.z)]])
+                list_loc_signs.extend([[cnt[2], sign_in_map.pose.position.x, sign_in_map.pose.position.y,
+                                        sign_in_map.pose.position.z]])
         for cnt in self.currentCerc:
             cv2.drawContours(self.my_image, [cnt[0]], -1, (255, 255, 0), 2)
             cv2.putText(self.my_image, cnt[2], cnt[1], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
             #----------------------------
             sign_in_map = self.localizer_signs.find_location(cnt[1], cnt[0], queued_image.timestamp)
             if sign_in_map is not None:
-                self.sign_map_list.extend([[cnt[2], (sign_in_map.point.x, sign_in_map.point.y, sign_in_map.point.z)]])
+                list_loc_signs.extend([[cnt[2], sign_in_map.pose.position.x, sign_in_map.pose.position.y,
+                                        sign_in_map.pose.position.z]])
         for cnt in self.currentTri:
             cv2.drawContours(self.my_image, [cnt[0]], -1, (255, 255, 0), 2)
             cv2.putText(self.my_image, cnt[2], cnt[1], cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
             #----------------------------
             sign_in_map = self.localizer_signs.find_location(cnt[1], cnt[0], queued_image.timestamp)
             if sign_in_map is not None:
-                rospy.loginfo("Sign: "+cnt[2]+", X: "+str(pose.position.x)+", Y: "+str(pose.position.y)+", Z: "+str(pose.position.z)+"")
-                self.sign_map_list.extend([[cnt[2], (sign_in_map.point.x, sign_in_map.point.y, sign_in_map.point.z)]])
+                rospy.loginfo("Sign: "+cnt[2]+", X: "+str(sign_in_map.pose.position.x)+", Y: "+
+                              str(sign_in_map.pose.position.y)+", Z: "+str(sign_in_map.pose.position.z)+"")
+                list_loc_signs.extend([[cnt[2], sign_in_map.pose.position.x, sign_in_map.pose.position.y,
+                                        sign_in_map.pose.position.z]])
 
         self.result_img_pub.publish(self.bridge.cv2_to_imgmsg(self.my_image, "bgr8"))
+
+        # Save the type of sign as well as its position in a csv file so afterwards we are able to determine the
+        # average distance
+        with open('cluster_data.csv', 'w') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerows(list_loc_signs)
+
+        csvFile.close()
 
         self.currentTri = [] # just to save the Triangles of this specific picture, empty for another picture
         self.currentRect = []
         self.currentCerc = []
-
 
 def main(args):
     rospy.init_node('object_recognition', anonymous=True)
