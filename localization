@@ -7,7 +7,7 @@ import numpy as np
 import rospy
 import tf2_ros
 import tf2_geometry_msgs
-from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_matrix, euler_from_matrix
+from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_matrix, euler_from_matrix, quaternion_from_matrix
 from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3
 from aruco_msgs.msg import MarkerArray
 from crazyflie_driver.msg import Position
@@ -18,8 +18,8 @@ from collections import deque
 aruco_queue = deque(maxlen = 6)
 
 '''
-solved problem:dangerous when yaw of drift close to 180 degree
-add bad marker quality detection
+solved problem in doing average of quaternion
+please, no bugs
 '''
 
 def transform_callback(data):
@@ -86,67 +86,78 @@ def pre_aruco(aruco_queue):
             if aruco.id == nearest_ID:  # only care about nearest marker
                 distance[t] = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2)
         t += 1
-    largest_ID = np.where(distance==np.max(distance))  # largest timestamp
-    largest_ID = largest_ID[0][0]
-    smallest_ID = np.where(distance==np.min(distance))  # smallest timestamp
-    smallest_ID = smallest_ID[0][0]
+    largest_stamp = np.where(distance==np.max(distance))  # largest timestamp
+    largest_stamp = largest_stamp[0][0]
+    smallest_stamp = np.where(distance==np.min(distance))  # smallest timestamp
+    smallest_stamp = smallest_stamp[0][0]
 
     # average
     t = 0
-    p_x = 0
-    p_y = 0
-    p_z = 0
-    o_r = 0
-    o_p = 0
-    o_y = 0
+    p_x = []
+    p_y = []
+    p_z = []
+    o_x = []
+    o_y = []
+    o_z = []
+    o_w = []
 
     for data in aruco_queue: # data in same timestamp
-        if t!=largest_ID and t!=smallest_ID:
+        if t!=largest_stamp and t!=smallest_stamp:
             for aruco in data.markers:  # for all markers
                 if aruco.id == nearest_ID:  # only care about nearest marker
-                    p_x += aruco.pose.pose.position.x
-                    p_y += aruco.pose.pose.position.y
-                    p_z += aruco.pose.pose.position.z
-                    roll, pitch, yaw = euler_from_quaternion((aruco.pose.pose.orientation.x,
-                                                              aruco.pose.pose.orientation.y,
-                                                              aruco.pose.pose.orientation.z,
-                                                              aruco.pose.pose.orientation.w))
-                    o_r += roll
-                    o_p += pitch
-                    o_y += yaw
+                    p_x.append(aruco.pose.pose.position.x)
+                    p_y.append(aruco.pose.pose.position.y)
+                    p_z.append(aruco.pose.pose.position.z)
+                    o_x.append(aruco.pose.pose.orientation.x)
+                    o_y.append(aruco.pose.pose.orientation.y)
+                    o_z.append(aruco.pose.pose.orientation.z)
+                    o_w.append(aruco.pose.pose.orientation.w)
 
         t += 1
+    mean = []
+    mean.append(np.mean(p_x))
+    mean.append(np.mean(p_y))
+    mean.append(np.mean(p_z))
+    mean.append(np.mean(o_x))
+    mean.append(np.mean(o_y))
+    mean.append(np.mean(o_z))
+    mean.append(np.mean(o_w))
 
-    p_x /= k-2
-    p_y /= k-2
-    p_z /= k-2
-    o_r /= k-2
-    o_p /= k-2
-    o_y /= k-2
-    (o_x, o_y, o_z, o_w) = quaternion_from_euler(o_r, o_p, o_y)
+    var_p_x = np.var(p_x)
+    var_p_y = np.var(p_y)
+    var_o_x = np.var(o_x)
+    var_o_y = np.var(o_y)
+    var_o_z = np.var(o_z)
+    var_o_w = np.var(o_w)
+    #print(var_p_x, var_p_y, var_o_z, var_o_z)
+    if  var_o_x > 0.2 or var_o_y > 0.2 or var_o_z > 0.2 or var_o_w > 0.2:
+        print("bad data")
+        return PoseStamped(), -3
 
     result = PoseStamped()
     result.header.stamp = aruco_queue[int(k/2)].header.stamp  # use time at middle stamp
     result.header.frame_id = "cf1/camera_link"
-    result.pose.position.x = p_x
-    result.pose.position.y = p_y
-    result.pose.position.z = p_z
-    result.pose.orientation.x = o_x
-    result.pose.orientation.y = o_y
-    result.pose.orientation.z = o_z
-    result.pose.orientation.w = o_w
+    result.pose.position.x = mean[0]
+    result.pose.position.y = mean[1]
+    result.pose.position.z = mean[2]
+    result.pose.orientation.x = mean[3]
+    result.pose.orientation.y = mean[4]
+    result.pose.orientation.z = mean[5]
+    result.pose.orientation.w = mean[6]
 
     if p_x == 0 and p_y == 0:
         print("error wtf?")
-        return PoseStamped(), -3
+        return PoseStamped(), -4
     return result, nearest_ID
 
 
-def pub_tf(x, y, yaw):
+def pub_tf(x, y, oz, ow):
     tf_buf   = tf2_ros.Buffer()
     tf_lstn  = tf2_ros.TransformListener(tf_buf)
 
-    (orientation_x, orientation_y, orientation_z, orientation_w) = quaternion_from_euler(0.0, 0.0, yaw)
+    q = math.sqrt(oz**2 + ow**2)
+    oz /= q
+    ow /= q
     br = tf2_ros.TransformBroadcaster()
     tfO2M = TransformStamped()
     tfO2M.header.stamp = rospy.Time.now()
@@ -157,10 +168,11 @@ def pub_tf(x, y, yaw):
     tfO2M.transform.translation.z = 0.0
     tfO2M.transform.rotation.x = 0.0
     tfO2M.transform.rotation.y = 0.0
-    tfO2M.transform.rotation.z = orientation_z
-    tfO2M.transform.rotation.w = orientation_w
+    tfO2M.transform.rotation.z = oz
+    tfO2M.transform.rotation.w = ow
     br.sendTransform(tfO2M)
-    print(x, y, yaw)
+    (roll, pitch, yaw) = euler_from_quaternion((0.0, 0.0, oz, ow))
+    print(x, y, oz, ow)
 
 
 def localization(argv):
@@ -188,6 +200,8 @@ def localization(argv):
     print('localization running')
 
     flag = 0  # flag for first running
+    yaw_flag = 0  # flag for unusual jump
+    init_flag = 20 # flag for initial jump
 
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
@@ -199,7 +213,8 @@ def localization(argv):
             if pub_flag == 0:
                 trans_x = -0.5
                 trans_y = -0.5
-                trans_yaw = 0.0
+                trans_oz = 0.0
+                trans_ow = 1.0
                 flag = 1
                 pub_flag = 1
                 print("publish init tf")
@@ -211,21 +226,26 @@ def localization(argv):
             if pub_flag == 0:
                 trans_x = trans_x
                 trans_y = trans_y
-                trans_yaw = trans_yaw
+                trans_oz = trans_oz
+                trans_ow = trans_ow
                 pub_flag = 1
                 print("publish last tf (old tf or bad marker)")
+
+        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', rospy.Time(0)):
+            if pub_flag == 0:
+                trans_x = trans_x
+                trans_y = trans_y
+                trans_oz = trans_oz
+                trans_ow = trans_ow
+                pub_flag = 1
+                print("publish last tf (no intime tf)")
 
         # publish a new tf
         else:
             # ---------------do localization ----------------
             # transform pose in camera link to odm link
-            if not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp):
-                rospy.logwarn_throttle(5.0, 'No transform from %s to cf1/odom' % aruco_marker.header.frame_id)
-                # no intime tf, wait
-                aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(1.0))
-            else:
-                aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(0.1))
-
+            aruco_marker.header.stamp = rospy.Time(0)
+            aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(0.1))
             # calculate the difference (true_pose detect_pose)
             quat = [aruco_map_pose[aruco_ID].pose.orientation.x,
                     aruco_map_pose[aruco_ID].pose.orientation.y,
@@ -255,50 +275,62 @@ def localization(argv):
             T_m2o[1][3] = 0
             T_m2o[2][3] = 0
 
-            (roll, pitch, yaw) = euler_from_matrix(T_m2o, 'rxyz')
+            (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
 
-            if yaw < 0:
-                yaw += 2 * math.pi
+            if not d_buf: # init buf
+                d_buf = [0, 0, 0, 0]  # x, y, o_x, o_w of last tf
+
+            print(position_x, position_y, o_z, o_w, 0, 0)
+            '''if (abs(d_buf[2]+o_z) < 0.2 and (d_buf[2]<0 != o_z<0) ) or (abs(d_buf[3]+o_w) < 0.2 and (d_buf[3]<0 != o_w<0)):
+            # quaternion jump -+ happens
+                print("too large waving")
+                print(position_x, position_y, o_z, o_w)
+                queue.clear()'''
 
             # cal time average
-            queue.append([position_x, position_y, yaw])
-            k = len(queue)
-            timeAve_x = 0
-            timeAve_y = 0
-            timeAve_yaw = 0
+            queue.append([position_x, position_y, o_z, o_w])
+            timeAve_x = []
+            timeAve_y = []
+            timeAve_oz = []
+            timeAve_ow = []
 
             for i in queue:
-                timeAve_x +=  i[0]
-                timeAve_y +=  i[1]
-                timeAve_yaw +=  i[2]
+                timeAve_x.append( i[0])
+                timeAve_y.append( i[1])
+                timeAve_oz.append(i[2])
+                timeAve_ow.append(i[3])
 
-            timeAve_x /= k
-            timeAve_y /= k
-            timeAve_yaw /= k
+            mean_x = np.mean(timeAve_x)
+            mean_y = np.mean(timeAve_y)
+            mean_oz = np.mean(timeAve_oz)
+            mean_ow = np.mean(timeAve_ow)
 
-            if not d_buf:
-                d_buf = [0, 0, 0, 0]  # x, y, yaw of last tf
+            var_oz = np.var(timeAve_oz)
+            var_ow = np.var(timeAve_ow)
 
-            # step_d = math.sqrt(pow(timeAve_x - d_buf[0], 2) + pow(timeAve_y - d_buf[1], 2))
-            # step_yaw = math.degrees(abs(timeAve_yaw - d_buf[2]))
-
-            # change threshoold when detect deferent marker
-            # if d_buf[3] == aruco_ID:
-            #     threshold = [0.1, 5]
-            # else:
-            #     threshold = [0.5, 10]
+            if var_oz > 0.2 or var_ow > 0.2:
+                print("bad result")
+                queue.clear()
+                if pub_flag == 0:
+                    trans_x = trans_x
+                    trans_y = trans_y
+                    trans_oz = trans_oz
+                    trans_ow = trans_ow
+                    pub_flag = 1
 
             # TF form odm to map
-            if pub_flag == 0:
-                trans_x = timeAve_x
-                trans_y = timeAve_y
-                trans_yaw = timeAve_yaw
+            if pub_flag == 0 and yaw_flag == 0:
+                trans_x = mean_x
+                trans_y = mean_y
+                trans_oz = mean_oz
+                trans_ow = mean_ow
+                d_buf = [mean_x, mean_y, mean_oz, mean_ow]
                 pub_flag = 1
                 print("publish new tf")
-                d_buf = [timeAve_x, timeAve_y, timeAve_yaw, aruco_ID]
 
         if pub_flag == 1: # updat a tf in this loop
-            pub_tf(trans_x, trans_y, trans_yaw)
+
+            pub_tf(trans_x, trans_y, trans_oz, trans_ow)
             rate.sleep()
 
 def main(argv=sys.argv):
