@@ -15,7 +15,7 @@ from crazyflie_driver.msg import Position
 import copy
 from collections import deque
 
-aruco_queue = deque(maxlen = 6)
+aruco_queue = deque(maxlen = 4)
 
 '''
 solved problem in doing average of quaternion
@@ -46,7 +46,7 @@ def read_from_json(m):
 def pre_aruco(aruco_queue):
     '''preprocess the data form camera: delete the outlier and choose nearest markers'''
     k = len(aruco_queue)
-    if k < 6:  # if no enough data in queue, quit
+    if k < 4:  # if no enough data in queue, quit
         return PoseStamped(), -2  # return 0, -2 for localization to recognize
     # choose nearest marker
     flag = 0  # flag of rejecting low quality marker
@@ -58,7 +58,7 @@ def pre_aruco(aruco_queue):
             if aruco.id > 15 or aruco.id < 1:  # reject wrong id
                 continue
             d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
-            if d_now < 0.2 or d_now > 1.5:  # check if marker in proper distance
+            if d_now < 0.2:  # check if marker in proper distance
                 flag = 1
                 continue
             degree = math.atan2(aruco.pose.pose.position.x, aruco.pose.pose.position.z)
@@ -129,9 +129,10 @@ def pre_aruco(aruco_queue):
     var_o_y = np.var(o_y)
     var_o_z = np.var(o_z)
     var_o_w = np.var(o_w)
-    #print(var_p_x, var_p_y, var_o_z, var_o_z)
-    if  var_o_x > 0.2 or var_o_y > 0.2 or var_o_z > 0.2 or var_o_w > 0.2:
+    if var_o_x > 0.2 or var_o_y > 0.2 or var_o_z > 0.2 or var_o_w > 0.2:
         print("bad data")
+        print(var_p_x, var_p_y, var_o_z, var_o_z)
+        #aruco_queue.clear()
         return PoseStamped(), -3
 
     result = PoseStamped()
@@ -148,6 +149,7 @@ def pre_aruco(aruco_queue):
     if p_x == 0 and p_y == 0:
         print("error wtf?")
         return PoseStamped(), -4
+    #print(result, nearest_ID)
     return result, nearest_ID
 
 
@@ -183,7 +185,7 @@ def localization(argv):
     tf_buf   = tf2_ros.Buffer()
     tf_lstn  = tf2_ros.TransformListener(tf_buf)
 
-    queue_len = 10  # length of tf queue
+    queue_len = 3  # length of tf queue
     queue = deque(maxlen = queue_len)
 
     # Load world JSON
@@ -201,7 +203,6 @@ def localization(argv):
 
     flag = 0  # flag for first running
     yaw_flag = 0  # flag for unusual jump
-    init_flag = 20 # flag for initial jump
 
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
@@ -280,7 +281,6 @@ def localization(argv):
             if not d_buf: # init buf
                 d_buf = [0, 0, 0, 0]  # x, y, o_x, o_w of last tf
 
-            print(position_x, position_y, o_z, o_w, 0, 0)
             '''if (abs(d_buf[2]+o_z) < 0.2 and (d_buf[2]<0 != o_z<0) ) or (abs(d_buf[3]+o_w) < 0.2 and (d_buf[3]<0 != o_w<0)):
             # quaternion jump -+ happens
                 print("too large waving")
@@ -310,7 +310,7 @@ def localization(argv):
 
             if var_oz > 0.2 or var_ow > 0.2:
                 print("bad result")
-                queue.clear()
+                #queue.clear()
                 if pub_flag == 0:
                     trans_x = trans_x
                     trans_y = trans_y
