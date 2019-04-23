@@ -22,7 +22,7 @@ class Node:
         self.pind = pind
 
 
-def calObsWall(sx, sy, ex, ey, obsMap, reso):
+def calObsWall(sx, sy, ex, ey, obsMap, reso, airSpace):
     '''
     sx, sy start point of the wall
     ex, ey end point of the wall
@@ -43,52 +43,47 @@ def calObsWall(sx, sy, ex, ey, obsMap, reso):
     if yWidth == 0:
         yWidth = 1
 
-    for ix in range(xWidth + 1):
+    for ix in range(xWidth):
         x = (ix + xMin) * reso
         for iy in range(yWidth):
             y = (iy + yMin) * reso  # (x,y): position of each node
             d = abs(k * (x - sx) - (y - sy)) / math.sqrt(1 + k * k)
             if d < 1.0 * reso:
                 # if distance from node to obstacle less than 1.5, regard as occupied
-                obsMap[ix + xMin + 40][iy + yMin + 20] = True  # move the zero points(need to change if the airspace change)
+
+                obsMap[int(ix + xMin - airSpace[0][0] / reso)][int(iy + yMin - airSpace[1][0] / reso)] = True  # move the zero points(need to change if the airspace change)
     return obsMap
 
 
-def calObsGate(posx, posy, angle, obsMap, reso):
+def calObsGate(posx, posy, angle, obsMap, reso, airSpace):
     '''
     posx posy postion of gate
     angle: angle of gate
     '''
     angle = angle - 90  # orientation of the wall made by gate
-    gateSize = 0.8  # 60cm
+    gateSize = 0.6  # 60cm
     if angle < 0:
         angle = angle + 180
     if angle >= 180:
         angle = angle - 180  # get angle in (0, 180)
-    sx = posx - math.cos(
-        math.radians(angle)) * gateSize * 0.5  # start point and end point
-    sy = posy - math.sin(
-        math.radians(angle)) * gateSize * 0.5  # treat it as wall
-    ex = posx + math.cos(
-        math.radians(angle)
-    ) * gateSize * 0.5  # temperately(!!! the center of gates can be free)
+    sx = posx - math.cos(math.radians(angle)) * gateSize * 0.5  # start point and end point
+    sy = posy - math.sin(math.radians(angle)) * gateSize * 0.5  # treat it as wall
+    ex = posx + math.cos(math.radians(angle)) * gateSize * 0.5  # temperately(!!! the center of gates can be free)
     ey = posy + math.sin(math.radians(angle)) * gateSize * 0.5
-
-    obsMap = calObsWall(sx, sy, ex, ey, obsMap, reso)
+    #print(sx,sy,ex,ey)
+    obsMap = calObsWall(sx, sy, ex, ey, obsMap, reso, airSpace)
 
     return obsMap
 
 
-def calMap(reso):
-    airSpace = [[-4, 2], [-2, 2]]  # min and max of x y
+def calMap(reso, airSpace):
     xWidth = int((airSpace[0][1] - airSpace[0][0]) / reso)
     yWidth = int((airSpace[1][1] - airSpace[1][0]) / reso)
-    obsMap = np.array([[False for i in range(yWidth)]
-                       for i in range(xWidth)])  # obsMap[x][y]
+    obsMap = np.array([[False for i in range(yWidth)] for i in range(xWidth)])  # obsMap[x][y]
 
     # data of wall and gate
     # wall [sx, sy, ex, ey]
-    wall = np.array([[-2.0, 2.0, -2.0, 0.25], [-2.0, 0.25, -1.0, 0.25]])
+    wall = np.array([[-2.0, 2.0, -2.0, 0.25]]) # [-2.0, 0.25, -1.0, 0.25] ignore the low wall
     # gate [x, y, angle]
     gate = [[ 1.25, -0.50, 135.0],
             [ 0.25,  0.50, 135.0],
@@ -100,10 +95,10 @@ def calMap(reso):
             [ 1.25,  0.50,  45.0]]
 
     for i in wall:
-        obsMap = calObsWall(i[0], i[1], i[2], i[3], obsMap, reso)
+        obsMap = calObsWall(i[0], i[1], i[2], i[3], obsMap, reso, airSpace)
 
     for i in gate:
-        obsMap = calObsGate(i[0], i[1], i[2], obsMap, reso)
+        obsMap = calObsGate(i[0], i[1], i[2], obsMap, reso, airSpace)
 
     return obsMap
 
@@ -114,17 +109,16 @@ def calHeuristic(n1, n2):
     return d
 
 
-def calIndex(node, reso):
-    airSpace = [[-4, 2], [-2, 2]]  # min and max of x y
+def calIndex(node, reso, airSpace):
     yWidth = int((airSpace[1][1] - airSpace[1][0]) / reso)
     return (node.x - airSpace[0][0]) * yWidth + (node.y - airSpace[1][0])
 
 
-def verifyNode(node, obmap, reso):
+def verifyNode(node, obsmap, reso, airSpace):
     '''
     check outlier and obsticle
     '''
-    airSpace = [[-4, 2], [-2, 2]]  # min and max of x y
+    print(node.x, node.y)
     if node.x < (airSpace[0][0] / reso):
         return False
     elif node.y < (airSpace[1][0] / reso):
@@ -134,7 +128,7 @@ def verifyNode(node, obmap, reso):
     elif node.y >= (airSpace[1][1] / reso):
         return False
 
-    if obmap[node.x + 40][node.y + 20]:  # (need to change if the airspace change)
+    if obsmap[int(node.x - airSpace[0][0] / reso)][int(node.x - airSpace[0][0] / reso)]:
         return False
 
     return True
@@ -158,34 +152,40 @@ def aStarPlanning(sx, sy, gx, gy):
     '''
     (sx,sy) (gx,gy) start point and goal point
     '''
+    airSpace = [[-4, 2], [-2, 2]]
     reso = 0.1  # Resolution = 10cm
+    len_x = int((airSpace[0][1] - airSpace[0][0]) / reso)
+    len_y = int((airSpace[1][1] - airSpace[1][0]) / reso)
     nstart = Node(round(sx / reso), round(sy / reso), 0.0, -1)
     ngoal = Node(round(gx / reso), round(gy / reso), 0.0, -1)
 
-    obsMap = calMap(reso)
-
+    obsMap = calMap(reso, airSpace)
     # show map
-    for x in range(60):
-        for y in range(40):
+    for x in range(len_x):
+        for y in range(len_y):
             if obsMap[x][y]:
-                plt.plot(x * 0.1 - 4, y * 0.1 - 2, ".k")
+                plt.plot(x * reso + airSpace[0][0], y * reso + airSpace[1][0], ".k")
     plt.plot(sx, sy, "xr")
     plt.plot(gx, gy, "xb")
     plt.grid(True)
     plt.axis("equal")
 
     # dx, dy, cost
-    motion = [[1, 0, 1], [0, 1, 1], [-1, 0, 1], [0, -1, 1],
-              [-1, -1, math.sqrt(2)], [-1, 1, math.sqrt(2)],
-              [1, -1, math.sqrt(2)], [1, 1, math.sqrt(2)]]
+    motion = [[ 1,  0, 1],
+              [ 0,  1, 1],
+              [-1,  0, 1],
+              [ 0, -1, 1],
+              [-1, -1, math.sqrt(2)],
+              [-1,  1, math.sqrt(2)],
+              [ 1, -1, math.sqrt(2)],
+              [ 1,  1, math.sqrt(2)]]
 
     openSet, closeSet = dict(), dict()
-    openSet[calIndex(nstart, reso)] = nstart
+    openSet[calIndex(nstart, reso, airSpace)] = nstart
 
     while 1:
         cId = min(openSet, key=lambda o: openSet[o].cost + calHeuristic(ngoal, openSet[o]))
         current = openSet[cId]
-
         # show graph
         plt.plot(current.x * reso, current.y * reso, "xc")
         if len(closeSet.keys()) % 10 == 0:
@@ -204,14 +204,13 @@ def aStarPlanning(sx, sy, gx, gy):
 
         # expand search grid based on motion model
         for i, _ in enumerate(motion):
-            node = Node(current.x + motion[i][0], current.y + motion[i][1],
-                        current.cost + motion[i][2], cId)
-            nId = calIndex(node, reso)
+            node = Node(current.x + motion[i][0], current.y + motion[i][1], current.cost + motion[i][2], cId)
+            nId = calIndex(node, reso, airSpace)
 
             if nId in closeSet:
                 continue
 
-            if not verifyNode(node, obsMap, reso):
+            if not verifyNode(node, obsMap, reso, airSpace):
                 continue
 
             if nId not in openSet:
@@ -230,7 +229,7 @@ def yaw_planning(x, y, obsMap, reso):
     '''
     1. the yaw angle towards the next check point in route
     '''
-    # t = len(rx)  # length of route
+    # t = len(x)  # length of route
     # yaw = np.array([None for i in range(t)])
     # for i in range(t):
     #     if i + 1 == t:  # the last one use the yaw from previous one
@@ -354,7 +353,7 @@ def yaw_planning(x, y, obsMap, reso):
     return x, y, yaw
 
 
-#rx, ry, ryaw = aStarPlanning(-3.0, 1.5, 1.7, -0.9)
+rx, ry, ryaw = aStarPlanning(0.0, 0.5, 1.7, -0.9)
 #print(ryaw )
-#plt.plot(rx, ry, "-r")
-#plt.show()
+plt.plot(rx, ry, "-r")
+plt.show()
