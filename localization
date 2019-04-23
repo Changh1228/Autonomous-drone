@@ -15,7 +15,8 @@ from crazyflie_driver.msg import Position
 import copy
 from collections import deque
 
-aruco_queue = deque(maxlen = 4)
+meas_len = 6
+aruco_queue = deque(maxlen = meas_len)
 
 '''
 solved problem in doing average of quaternion
@@ -42,11 +43,44 @@ def read_from_json(m):
                                                    math.radians(yaw))
     return t
 
+def quaternion_average(x, y, z, quaternion):
+    quaternion = np.array(quaternion)
+    t = quaternion.shape[0]
+    weight = 1
+    sum = (1 + t) * t / 2
+    mean_x = 0
+    mean_y = 0
+    mean_z = 0
+    for i in range(t):
+        # x, y, z average
+        mean_x += x[i] * weight / sum
+        mean_y += y[i] * weight / sum
+        mean_z += z[i] * weight / sum
+
+        quaternion[i] = quaternion[i] * weight / sum
+        weight += 1
+
+    Q = np.dot(np.transpose(quaternion), quaternion)
+    (w, v) = np.linalg.eigh(Q)
+    i_max = np.argmax(w)
+    ox = v[0,i_max]
+    oy = v[1,i_max]
+    oz = v[2,i_max]
+    ow = v[3,i_max]
+    d = math.sqrt(ox**2 + oy**2 + oz**2 + ow**2)
+
+    ox /= d
+    oy /= d
+    oz /= d
+    ow /= d
+    return mean_x, mean_y, mean_z, ox, oy, oz, ow
+
 
 def pre_aruco(aruco_queue):
     '''preprocess the data form camera: delete the outlier and choose nearest markers'''
+    global meas_len
     k = len(aruco_queue)
-    if k < 4:  # if no enough data in queue, quit
+    if k < meas_len:  # if no enough data in queue, quit
         return PoseStamped(), -2  # return 0, -2 for localization to recognize
     # choose nearest marker
     flag = 0  # flag of rejecting low quality marker
@@ -96,10 +130,9 @@ def pre_aruco(aruco_queue):
     p_x = []
     p_y = []
     p_z = []
-    o_x = []
-    o_y = []
-    o_z = []
-    o_w = []
+    quaternion = []
+    weight = 1  # weight in average
+    sum = (1 + (meas_len-2)) * (meas_len-2) / 2
 
     for data in aruco_queue: # data in same timestamp
         if t!=largest_stamp and t!=smallest_stamp:
@@ -108,43 +141,26 @@ def pre_aruco(aruco_queue):
                     p_x.append(aruco.pose.pose.position.x)
                     p_y.append(aruco.pose.pose.position.y)
                     p_z.append(aruco.pose.pose.position.z)
-                    o_x.append(aruco.pose.pose.orientation.x)
-                    o_y.append(aruco.pose.pose.orientation.y)
-                    o_z.append(aruco.pose.pose.orientation.z)
-                    o_w.append(aruco.pose.pose.orientation.w)
+                    quaternion.append([aruco.pose.pose.orientation.x,
+                                       aruco.pose.pose.orientation.y,
+                                       aruco.pose.pose.orientation.z,
+                                       aruco.pose.pose.orientation.w])
 
         t += 1
-    mean = []
-    mean.append(np.mean(p_x))
-    mean.append(np.mean(p_y))
-    mean.append(np.mean(p_z))
-    mean.append(np.mean(o_x))
-    mean.append(np.mean(o_y))
-    mean.append(np.mean(o_z))
-    mean.append(np.mean(o_w))
+    if len(p_x) < meas_len-2:
+        return PoseStamped(), -2
 
-    var_p_x = np.var(p_x)
-    var_p_y = np.var(p_y)
-    var_o_x = np.var(o_x)
-    var_o_y = np.var(o_y)
-    var_o_z = np.var(o_z)
-    var_o_w = np.var(o_w)
-    if var_o_x > 0.2 or var_o_y > 0.2 or var_o_z > 0.2 or var_o_w > 0.2:
-        print("bad data")
-        print(var_p_x, var_p_y, var_o_z, var_o_z)
-        #aruco_queue.clear()
-        return PoseStamped(), -3
-
+    x, y, z, ox, oy, oz, ow = quaternion_average(p_x, p_y, p_z, quaternion)
     result = PoseStamped()
     result.header.stamp = aruco_queue[int(k/2)].header.stamp  # use time at middle stamp
     result.header.frame_id = "cf1/camera_link"
-    result.pose.position.x = mean[0]
-    result.pose.position.y = mean[1]
-    result.pose.position.z = mean[2]
-    result.pose.orientation.x = mean[3]
-    result.pose.orientation.y = mean[4]
-    result.pose.orientation.z = mean[5]
-    result.pose.orientation.w = mean[6]
+    result.pose.position.x = x
+    result.pose.position.y = y
+    result.pose.position.z = z
+    result.pose.orientation.x = ox
+    result.pose.orientation.y = oy
+    result.pose.orientation.z = oz
+    result.pose.orientation.w = ow
 
     if p_x == 0 and p_y == 0:
         print("error wtf?")
@@ -202,7 +218,7 @@ def localization(argv):
     print('localization running')
 
     flag = 0  # flag for first running
-    yaw_flag = 0  # flag for unusual jump
+    clear_flag = 0  # flag for unusual jump
 
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
@@ -278,55 +294,35 @@ def localization(argv):
 
             (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
 
-            if not d_buf: # init buf
-                d_buf = [0, 0, 0, 0]  # x, y, o_x, o_w of last tf
-
-            '''if (abs(d_buf[2]+o_z) < 0.2 and (d_buf[2]<0 != o_z<0) ) or (abs(d_buf[3]+o_w) < 0.2 and (d_buf[3]<0 != o_w<0)):
-            # quaternion jump -+ happens
-                print("too large waving")
-                print(position_x, position_y, o_z, o_w)
-                queue.clear()'''
-
             # cal time average
-            queue.append([position_x, position_y, o_z, o_w])
+            queue.append([position_x, position_y, position_z, o_z, o_w])
             timeAve_x = []
             timeAve_y = []
-            timeAve_oz = []
-            timeAve_ow = []
+            timeAve_z = []
+            timeAve_quat = []
 
             for i in queue:
-                timeAve_x.append( i[0])
-                timeAve_y.append( i[1])
-                timeAve_oz.append(i[2])
-                timeAve_ow.append(i[3])
+                timeAve_x.append(i[0])
+                timeAve_y.append(i[1])
+                timeAve_z.append(i[2])
+                timeAve_quat.append([0.0, 0.0, i[3], i[4]])
 
-            mean_x = np.mean(timeAve_x)
-            mean_y = np.mean(timeAve_y)
-            mean_oz = np.mean(timeAve_oz)
-            mean_ow = np.mean(timeAve_ow)
-
-            var_oz = np.var(timeAve_oz)
-            var_ow = np.var(timeAve_ow)
-
-            if var_oz > 0.2 or var_ow > 0.2:
-                print("bad result")
-                #queue.clear()
-                if pub_flag == 0:
-                    trans_x = trans_x
-                    trans_y = trans_y
-                    trans_oz = trans_oz
-                    trans_ow = trans_ow
-                    pub_flag = 1
+            mean_x, mean_y, mean_z, mean_ox, mean_oy, mean_oz, mean_ow = quaternion_average(timeAve_x, timeAve_y, timeAve_z, timeAve_quat)
 
             # TF form odm to map
-            if pub_flag == 0 and yaw_flag == 0:
+            if pub_flag == 0:
                 trans_x = mean_x
                 trans_y = mean_y
                 trans_oz = mean_oz
                 trans_ow = mean_ow
-                d_buf = [mean_x, mean_y, mean_oz, mean_ow]
                 pub_flag = 1
                 print("publish new tf")
+
+        '''clear_flag += 1
+        if clear_flag > 10000:
+            queue.clear()
+            aruco_queue.clear()
+            clear_flag = 0'''
 
         if pub_flag == 1: # updat a tf in this loop
 
