@@ -92,9 +92,9 @@ def pre_aruco(aruco_queue):
             if aruco.id > 15 or aruco.id < 1:  # reject wrong id
                 continue
             d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
-            '''if d_now < 0.2:  # check if marker in proper distance
+            if d_now < 0.1:  # check if marker in proper distance
                 flag = 1
-                continue'''
+                continue
             degree = math.atan2(aruco.pose.pose.position.x, aruco.pose.pose.position.z)
             if degree < -0.65 or degree > 0.65:  # reject the marker in the edge of pic
                 flag = 1
@@ -131,8 +131,6 @@ def pre_aruco(aruco_queue):
     p_y = []
     p_z = []
     quaternion = []
-    weight = 1  # weight in average
-    sum = (1 + (meas_len-2)) * (meas_len-2) / 2
 
     for data in aruco_queue: # data in same timestamp
         if t!=largest_stamp and t!=smallest_stamp:
@@ -147,12 +145,12 @@ def pre_aruco(aruco_queue):
                                        aruco.pose.pose.orientation.w])
 
         t += 1
-    if len(p_x) < meas_len-2:
-        return PoseStamped(), -2
+    '''if len(p_x) < meas_len-2:
+        return PoseStamped(), -2'''
 
     x, y, z, ox, oy, oz, ow = quaternion_average(p_x, p_y, p_z, quaternion)
     result = PoseStamped()
-    result.header.stamp = aruco_queue[int(k/2)].header.stamp  # use time at middle stamp
+    result.header.stamp = aruco_queue[k-1].header.stamp  # use time at middle stamp
     result.header.frame_id = "cf1/camera_link"
     result.pose.position.x = x
     result.pose.position.y = y
@@ -162,9 +160,6 @@ def pre_aruco(aruco_queue):
     result.pose.orientation.z = oz
     result.pose.orientation.w = ow
 
-    if p_x == 0 and p_y == 0:
-        print("error wtf?")
-        return PoseStamped(), -4
     #print(result, nearest_ID)
     return result, nearest_ID
 
@@ -173,7 +168,7 @@ def pub_tf(x, y, oz, ow):
     tf_buf   = tf2_ros.Buffer()
     tf_lstn  = tf2_ros.TransformListener(tf_buf)
 
-    q = math.sqrt(oz**2 + ow**2 + 0.000001**2 + 0.000001**2)
+    q = math.sqrt(oz**2 + ow**2)
     oz /= q
     ow /= q
     br = tf2_ros.TransformBroadcaster()
@@ -184,13 +179,13 @@ def pub_tf(x, y, oz, ow):
     tfO2M.transform.translation.x = x
     tfO2M.transform.translation.y = y
     tfO2M.transform.translation.z = 0.0
-    tfO2M.transform.rotation.x = 0.000001
-    tfO2M.transform.rotation.y = 0.000001
+    tfO2M.transform.rotation.x = 0.0
+    tfO2M.transform.rotation.y = 0.0
     tfO2M.transform.rotation.z = oz
     tfO2M.transform.rotation.w = ow
     br.sendTransform(tfO2M)
     (roll, pitch, yaw) = euler_from_quaternion((0.0, 0.0, oz, ow))
-    print(x, y, oz, ow, yaw)
+    #print(x, y, oz, ow, yaw)
 
 
 def localization(argv):
@@ -246,8 +241,9 @@ def localization(argv):
                 trans_ow = trans_ow
                 pub_flag = 1
                 print("publish last tf (old tf or bad marker)")
+                print(aruco_ID)
 
-        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', rospy.Time(0)):
+        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp):
             if pub_flag == 0:
                 trans_x = trans_x
                 trans_y = trans_y
@@ -260,8 +256,8 @@ def localization(argv):
         else:
             # ---------------do localization ----------------
             # transform pose in camera link to odm link
-            aruco_marker.header.stamp = rospy.Time(0)
-            aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(0.1))
+            #aruco_marker.header.stamp = rospy.Time(0)
+            aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(1.0))
             # calculate the difference (true_pose detect_pose)
             quat = [aruco_map_pose[aruco_ID].pose.orientation.x,
                     aruco_map_pose[aruco_ID].pose.orientation.y,
@@ -293,6 +289,7 @@ def localization(argv):
 
             (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
 
+            print(position_x, position_y, o_z, o_w)
             # cal time average
             queue.append([position_x, position_y, position_z, o_x, o_y, o_z, o_w])
             timeAve_x = []
