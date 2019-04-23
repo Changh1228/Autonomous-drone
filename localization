@@ -92,9 +92,9 @@ def pre_aruco(aruco_queue):
             if aruco.id > 15 or aruco.id < 1:  # reject wrong id
                 continue
             d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
-            if d_now < 0.2:  # check if marker in proper distance
+            '''if d_now < 0.2:  # check if marker in proper distance
                 flag = 1
-                continue
+                continue'''
             degree = math.atan2(aruco.pose.pose.position.x, aruco.pose.pose.position.z)
             if degree < -0.65 or degree > 0.65:  # reject the marker in the edge of pic
                 flag = 1
@@ -173,7 +173,7 @@ def pub_tf(x, y, oz, ow):
     tf_buf   = tf2_ros.Buffer()
     tf_lstn  = tf2_ros.TransformListener(tf_buf)
 
-    q = math.sqrt(oz**2 + ow**2)
+    q = math.sqrt(oz**2 + ow**2 + 0.000001**2 + 0.000001**2)
     oz /= q
     ow /= q
     br = tf2_ros.TransformBroadcaster()
@@ -184,13 +184,13 @@ def pub_tf(x, y, oz, ow):
     tfO2M.transform.translation.x = x
     tfO2M.transform.translation.y = y
     tfO2M.transform.translation.z = 0.0
-    tfO2M.transform.rotation.x = 0.0
-    tfO2M.transform.rotation.y = 0.0
+    tfO2M.transform.rotation.x = 0.000001
+    tfO2M.transform.rotation.y = 0.000001
     tfO2M.transform.rotation.z = oz
     tfO2M.transform.rotation.w = ow
     br.sendTransform(tfO2M)
     (roll, pitch, yaw) = euler_from_quaternion((0.0, 0.0, oz, ow))
-    print(x, y, oz, ow)
+    print(x, y, oz, ow, yaw)
 
 
 def localization(argv):
@@ -201,7 +201,7 @@ def localization(argv):
     tf_buf   = tf2_ros.Buffer()
     tf_lstn  = tf2_ros.TransformListener(tf_buf)
 
-    queue_len = 3  # length of tf queue
+    queue_len = 6  # length of tf queue
     queue = deque(maxlen = queue_len)
 
     # Load world JSON
@@ -218,7 +218,6 @@ def localization(argv):
     print('localization running')
 
     flag = 0  # flag for first running
-    clear_flag = 0  # flag for unusual jump
 
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
@@ -238,7 +237,7 @@ def localization(argv):
 
         # already has a tf
         #    publih last tf
-        elif (rospy.Time.now().secs - aruco_marker.header.stamp.secs) > 2:
+        elif (rospy.Time.now().secs - aruco_marker.header.stamp.secs) > 1:
             # data form 2s before or not in good pose(aruco_marker = PoseStamped, sec = 0)
             if pub_flag == 0:
                 trans_x = trans_x
@@ -295,7 +294,7 @@ def localization(argv):
             (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
 
             # cal time average
-            queue.append([position_x, position_y, position_z, o_z, o_w])
+            queue.append([position_x, position_y, position_z, o_x, o_y, o_z, o_w])
             timeAve_x = []
             timeAve_y = []
             timeAve_z = []
@@ -305,7 +304,7 @@ def localization(argv):
                 timeAve_x.append(i[0])
                 timeAve_y.append(i[1])
                 timeAve_z.append(i[2])
-                timeAve_quat.append([0.0, 0.0, i[3], i[4]])
+                timeAve_quat.append([i[3], i[4], i[5], i[6]])
 
             mean_x, mean_y, mean_z, mean_ox, mean_oy, mean_oz, mean_ow = quaternion_average(timeAve_x, timeAve_y, timeAve_z, timeAve_quat)
 
@@ -317,12 +316,6 @@ def localization(argv):
                 trans_ow = mean_ow
                 pub_flag = 1
                 print("publish new tf")
-
-        '''clear_flag += 1
-        if clear_flag > 10000:
-            queue.clear()
-            aruco_queue.clear()
-            clear_flag = 0'''
 
         if pub_flag == 1: # updat a tf in this loop
 
