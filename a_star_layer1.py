@@ -9,8 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 '''
-update: fix the bug of reverse in final route (rx, ry)
-        add yaw calculation
+update: add z planning basic on marker
 '''
 
 
@@ -86,14 +85,14 @@ def calMap(reso, airSpace, z):
     # wall [sx, sy, ex, ey]
     wall = np.array([[-2.0, 2.0, -2.0, 0.25], [-2.0, 0.25, -1.0, 0.25]])
     # gate [x, y, angle]
-    gate = [[ 1.25, -0.50, 135.0],
-            [ 0.25,  0.50, 135.0],
-            [-1.50,  1.00, 180.0],
-            [-3.00,  0.50, 180.0],
-            [-2.50, -0.75, -90.0],
-            [-1.50, -0.75,   0.0],
+    gate = [[-2.50, -0.75,  90.0],
+            [-3.00,  1.50,   0.0],
+            [-1.00,  1.25, -90.0],
+            [-1.50, -0.750,-90.0],
             [ 0.25, -0.50,  45.0],
-            [ 1.25,  0.50,  45.0]]
+            [ 1.25,  0.50,  45.0],
+            [ 1.25, -0.50, -45.0],
+            [ 0.25,  0.50, -45.0]]
 
     if z <= 0.5:  # only care about wall if height lower than 0.5
         for i in wall:
@@ -274,21 +273,26 @@ def yaw_z_planning(x, y, obsMap):
     choose the most possible marker to see
     '''
     # pose of marker [x, y, z, roll, pitch, yaw]
-    marker = [[ 1.25, -0.50, 0.10,  0.0, -90.0, -135.0],
-              [ 0.25,  0.50, 0.10,  0.0, -90.0, -135.0],
-              [-1.50,  1.00, 0.10,  0.0, -90.0,  -90.0],
-              [-3.00,  0.50, 0.10,  0.0, -90.0,  -90.0],
-              [-2.50, -0.75, 0.10,  0.0, -90.0,    0.0],
-              [-1.50, -0.75, 0.10,  0.0, -90.0,   90.0],
+    marker = [[-2.50, -0.75, 0.10,  0.0, -90.0, -135.0],
+              [-3.00,  1.50, 0.10,  0.0, -90.0,   90.0],
+              [-1.00,  1.25, 0.10,  0.0, -90.0,    0.0],
+              [-1.50, -0.75, 0.10,  0.0, -90.0,    0.0],
               [ 0.25, -0.50, 0.10,  0.0, -90.0,  135.0],
               [ 1.25,  0.50, 0.10,  0.0, -90.0,  135.0],
+              [ 0.25,  0.50, 0.10,  0.0, -90.0,   45.0],
+              [ 1.25, -0.50, 0.10,  0.0, -90.0,   45.0],
               [-2.00,  0.00, 0.00, 90.0,   0.0,    0.0],
               [-2.50,  0.50, 0.00, 90.0,   0.0,    0.0],
               [-1.50,  0.50, 0.00, 90.0,   0.0,    0.0],
               [-0.50,  0.50, 0.00, 90.0,   0.0,    0.0],
               [-0.50,  0.00, 0.00, 90.0,   0.0,    0.0],
-              [ 2.00,  0.00, 0.00, 90.0,   0.0,    0.0]]
-
+              [ 0.75,  1.25, 0.00, 90.0,   0.0,    0.0]]
+    # print marker
+    for i in marker:
+        if i[4] == -90:
+            plt.plot(i[0], i[1], "ob")
+        elif i[4] == 0:
+            plt.plot(i[0], i[1], "or")
     t = len(x)  # length of route
     yaw = [None for k in range(t)]
     z = [None for k in range(t)]
@@ -324,7 +328,6 @@ def yaw_z_planning(x, y, obsMap):
                 angle = marker[j][5] + 90  # orientation of marker(+-180)
                 if angle > 180:
                     angle -= 360
-
                 if abs(degree - 180 - angle) > 60:
                     flag = 1
                     continue
@@ -380,6 +383,9 @@ def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
 
 
 # x, y, yaw, height = a_star_layer(0.0, 0.5, -2.5, 0.9)
-x, y, z, yaw = aStarPlanning(0.0, 0.5, -2.9, 0.5, 0.4)
-print(x, y, z, yaw)
+x, y, z, yaw = aStarPlanning(-2.5, 1.5, -1.0, 1.5, 0.4)
+print(x)
+print(y)
+print(z)
+print(yaw)
 plt.show()
