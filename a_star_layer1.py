@@ -76,27 +76,13 @@ def calObsGate(posx, posy, angle, obsMap, reso, airSpace):
     return obsMap
 
 
-def calMap(reso, airSpace, z):
+def calMap(reso, airSpace, gate):
     xWidth = int((airSpace[0][1] - airSpace[0][0]) / reso)
     yWidth = int((airSpace[1][1] - airSpace[1][0]) / reso)
     obsMap = np.array([[False for i in range(yWidth+1)] for i in range(xWidth+1)])  # obsMap[x][y]
-
-    # data of wall and gate
-    # wall [sx, sy, ex, ey]
-    wall = np.array([[-2.0, 2.0, -2.0, 0.25], [-2.0, 0.25, -1.0, 0.25]])
-    # gate [x, y, angle]
-    gate = [[-2.50, -0.75,  90.0],
-            [-3.00,  1.50,   0.0],
-            [-1.00,  1.25, -90.0],
-            [-1.50, -0.750,-90.0],
-            [ 0.25, -0.50,  45.0],
-            [ 1.25,  0.50,  45.0],
-            [ 1.25, -0.50, -45.0],
-            [ 0.25,  0.50, -45.0]]
-
-    if z <= 0.5:  # only care about wall if height lower than 0.5
-        for i in wall:
-            obsMap = calObsWall(i[0], i[1], i[2], i[3], obsMap, reso, airSpace)
+    # don't care about wall in planning
+    # for i in wall:
+    #     obsMap = calObsWall(i[0], i[1], i[2], i[3], obsMap, reso, airSpace)
 
     for i in gate:
         obsMap = calObsGate(i[0], i[1], i[2], obsMap, reso, airSpace)
@@ -172,12 +158,11 @@ def pruning(rx, ry):  # kill the checkpoint in the middle of stright routine
         elif ry[i+1]-ry[i] < 0:
             dy = 2
         dir = direction[dy][dx]
-        if dir_buf != 0 and dir_buf != dir:  # change moving direction
-            x.append(rx[i])
+        if (dir_buf != 0 and dir_buf != dir):  # change moving direction
+            x.append(rx[i])  # add check point
             y.append(ry[i])
             dir_buf = 0
             flag = 0
-            #continue
 
         dir_buf = dir
         flag += 1
@@ -188,10 +173,37 @@ def pruning(rx, ry):  # kill the checkpoint in the middle of stright routine
     return x, y
 
 
-def aStarPlanning(sx, sy, gx, gy, z):
+def aStarPlanning(sx, sy, gx, gy):
     '''
     (sx,sy) (gx,gy) start point and goal point
     '''
+    # wall [sx, sy, ex, ey, z]
+    wall = [[-2.0, 2.0, -2.0, 0.25, 0.5], [-2.0, 0.25, -1.0, 0.25, 0.25]]
+    # gate [x, y, angle]
+    gate = [[-2.50, -0.75,  90.0],
+            [-3.00,  1.50,   0.0],
+            [-1.00,  1.25, -90.0],
+            [-1.50, -0.750,-90.0],
+            [ 0.25, -0.50,  45.0],
+            [ 1.25,  0.50,  45.0],
+            [ 1.25, -0.50, -45.0],
+            [ 0.25,  0.50, -45.0]]
+    # pose of marker [x, y, z, roll, pitch, yaw]
+    marker = [[-2.50, -0.75, 0.10,  0.0, -90.0, -135.0],
+              [-3.00,  1.50, 0.10,  0.0, -90.0,   90.0],
+              [-1.00,  1.25, 0.10,  0.0, -90.0,    0.0],
+              [-1.50, -0.75, 0.10,  0.0, -90.0,    0.0],
+              [ 0.25, -0.50, 0.10,  0.0, -90.0,  135.0],
+              [ 1.25,  0.50, 0.10,  0.0, -90.0,  135.0],
+              [ 0.25,  0.50, 0.10,  0.0, -90.0,   45.0],
+              [ 1.25, -0.50, 0.10,  0.0, -90.0,   45.0],
+              [-2.00,  0.00, 0.00, 90.0,   0.0,    0.0],
+              [-2.50,  0.50, 0.00, 90.0,   0.0,    0.0],
+              [-1.50,  0.50, 0.00, 90.0,   0.0,    0.0],
+              [-0.50,  0.50, 0.00, 90.0,   0.0,    0.0],
+              [-0.50,  0.00, 0.00, 90.0,   0.0,    0.0],
+              [ 0.75,  1.25, 0.00, 90.0,   0.0,    0.0]]
+
     airSpace = [[-4, 2], [-2, 2]]
     reso = 0.1  # Resolution = 10cm
     len_x = int((airSpace[0][1] - airSpace[0][0]) / reso)
@@ -199,7 +211,7 @@ def aStarPlanning(sx, sy, gx, gy, z):
     nstart = Node(round(sx / reso), round(sy / reso), 0.0, -1)
     ngoal = Node(round(gx / reso), round(gy / reso), 0.0, -1)
 
-    obsMap = calMap(reso, airSpace, z)
+    obsMap = calMap(reso, airSpace, gate)
     # show map
     for x in range(len_x):
         for y in range(len_y):
@@ -209,6 +221,20 @@ def aStarPlanning(sx, sy, gx, gy, z):
     plt.plot(gx, gy, "xb")
     plt.grid(True)
     plt.axis("equal")
+
+    # show Wall
+    for i in wall:
+        if i[4] > 0.4:
+            plt.plot([i[0],i[2]], [i[1],i[3]], "-r")
+        elif i[4] <= 0.4:
+            plt.plot([i[0],i[2]], [i[1],i[3]], "-g")
+
+    # print marker
+    for i in marker:
+        if i[4] == -90:
+            plt.plot(i[0], i[1], "ob")
+        elif i[4] == 0:
+            plt.plot(i[0], i[1], "or")
 
     # dx, dy, cost
     motion = [[ 1,  0, 1],
@@ -264,38 +290,44 @@ def aStarPlanning(sx, sy, gx, gy, z):
     plt.plot(rx, ry, "-r")
     p_x, p_y = pruning(rx, ry)
     plt.plot(p_x, p_y, "-b")
-    z, yaw = yaw_z_planning(p_x, p_y, obsMap)
-    return p_x, p_y, z, yaw
+    x, y, z, yaw = yaw_z_pos_replanning(p_x, p_y, marker, wall)
+    return x, y, z, yaw
 
 
-def yaw_z_planning(x, y, obsMap):
+def determinant(v1, v2, v3, v4):
+    return (v1*v4-v2*v3)
+
+
+def cal_intersect(ax,ay,bx,by,cx,cy,dx,dy):
+    # check if wall and start-goal intersect
+    # ref: http://dec3.jlu.edu.cn/webcourse/t000096/graphics/chapter5/01_1.html
+    delta = determinant(bx-ax, cx-dx, by-ay, cy-dy)
+    if delta <= 0.000001 and delta >= -0.000001:  # delta = 0, parallel
+        return False
+
+    namenda = determinant(cx-ax, cx-dx, cy-ay, cy-dy) / delta
+    if namenda > 1 or namenda < 0:
+        return False
+
+    miu = determinant(bx-ax, cx-ax, by-ay, cy-ay) / delta
+    if miu > 1 or miu < 0:
+        return False
+
+    return True
+
+
+def yaw_z_pos_replanning(x, y, marker, wall):
     '''
     choose the most possible marker to see
     '''
-    # pose of marker [x, y, z, roll, pitch, yaw]
-    marker = [[-2.50, -0.75, 0.10,  0.0, -90.0, -135.0],
-              [-3.00,  1.50, 0.10,  0.0, -90.0,   90.0],
-              [-1.00,  1.25, 0.10,  0.0, -90.0,    0.0],
-              [-1.50, -0.75, 0.10,  0.0, -90.0,    0.0],
-              [ 0.25, -0.50, 0.10,  0.0, -90.0,  135.0],
-              [ 1.25,  0.50, 0.10,  0.0, -90.0,  135.0],
-              [ 0.25,  0.50, 0.10,  0.0, -90.0,   45.0],
-              [ 1.25, -0.50, 0.10,  0.0, -90.0,   45.0],
-              [-2.00,  0.00, 0.00, 90.0,   0.0,    0.0],
-              [-2.50,  0.50, 0.00, 90.0,   0.0,    0.0],
-              [-1.50,  0.50, 0.00, 90.0,   0.0,    0.0],
-              [-0.50,  0.50, 0.00, 90.0,   0.0,    0.0],
-              [-0.50,  0.00, 0.00, 90.0,   0.0,    0.0],
-              [ 0.75,  1.25, 0.00, 90.0,   0.0,    0.0]]
-    # print marker
-    for i in marker:
-        if i[4] == -90:
-            plt.plot(i[0], i[1], "ob")
-        elif i[4] == 0:
-            plt.plot(i[0], i[1], "or")
     t = len(x)  # length of route
     yaw = [None for k in range(t)]
     z = [None for k in range(t)]
+    rpx = []
+    rpy = []
+    rpz = []
+    rpyaw = []
+
     for i in range(t):
         id = None
         buf = [None for k in range(15)]
@@ -361,20 +393,83 @@ def yaw_z_planning(x, y, obsMap):
             else:
                 yaw[i] = 360 - math.degrees(math.acos(dx))
 
+            ID[i] = -1
             # z planning
             if i == 0:
                 z[i] = 0.41  # give middle height
             else:
                 z[i] = z[i-1]
         else:
-            # save the yaw of nearest marker
+            # save the yaw of nearest marker and marker ID
             yaw[i] = buf[id]
 
             if marker[id][4] == -90:  # vertical markers
                 z[i] = 0.3
             elif marker[id][4] == 0:  # horizontal markers
                 z[i] = 0.5
-    return z, yaw
+        #  layer planning
+        # append checkpoint we have
+        rpx.append(x[i])
+        rpy.append(y[i])
+        rpz.append(z[i])
+        rpyaw.append(yaw[i])
+        if i < t-1:
+            for w in wall: # wall [sx, sy, ex, ey, z]
+                #  cal_intersect(ax,ay,bx,by,cx,cy,dx,dy)
+                if cal_intersect(x[i],y[i],x[i+1],y[i+1],w[0],w[1],w[2],w[3]):
+                    if (x[i+1]-x[i]) == 0:
+                        k = 1000000
+                    else:
+                        k = (y[i+1]-y[i])/(x[i+1]-x[i])
+
+                    if w[0] == w[2]: # x direction
+                        cy = y[i] + (w[0]-x[i])*k
+                        if x[i] < x[i+1]:
+                            rpx.append(w[0]-0.2)
+                            rpy.append(cy)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+                            rpx.append(w[0]+0.2)
+                            rpy.append(cy)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+                        elif x[i] > x[i+1]:
+                            rpx.append(w[0]+0.2)
+                            rpy.append(cy)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+                            rpx.append(w[0]-0.2)
+                            rpy.append(cy)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+                    if w[1] == w[3]: # y direction
+                        cx = x[i] + (w[1]-x[i])*k
+                        if y[i] < y[i+1]:
+                            rpx.append(cx)
+                            rpy.append(w[1]-0.2)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+                            rpx.append(cx)
+                            rpy.append(w[1]+0.2)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+                        if y[i] > y[i+1]:
+                            rpx.append(cx)
+                            rpy.append(w[1]+0.2)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+                            rpx.append(cx)
+                            rpy.append(w[1]-0.2)
+                            rpz.append(w[4]+0.2)
+                            rpyaw.append(yaw[i])
+
+    return rpx, rpy, rpz, rpyaw
 
 
 def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
@@ -388,7 +483,7 @@ def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
 
 
 # x, y, yaw, height = a_star_layer(0.0, 0.5, -2.5, 0.9)
-x, y, z, yaw = aStarPlanning(-2.5, -0.3, -3.4, 1.5, 0.4)
+x, y, z, yaw = aStarPlanning(-2.5, 1.5, -1.0, 1.0)
 print(x)
 print(y)
 print(z)
