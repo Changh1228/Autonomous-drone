@@ -68,10 +68,6 @@ def calObsGate(posx, posy, angle, obsMap, reso, airSpace):
     '''
     angle = angle - 90  # orientation of the wall made by gate
     gateSize = 0.6  # 60cm
-    if angle < 0:
-        angle = angle + 180
-    if angle >= 180:
-        angle = angle - 180  # get angle in (0, 180)
     sx = posx - math.cos(math.radians(angle)) * gateSize * 0.5  # start point and end point
     sy = posy - math.sin(math.radians(angle)) * gateSize * 0.5  # treat it as wall
     ex = posx + math.cos(math.radians(angle)) * gateSize * 0.5  # temperately(!!! the center of gates can be free)
@@ -88,7 +84,7 @@ def calMap(reso, airSpace, z):
 
     # data of wall and gate
     # wall [sx, sy, ex, ey]
-    wall = np.array([[-2.0, 2.0, -2.0, 0.25]])  # [-2.0, 0.25, -1.0, 0.25] ignore the low wall
+    wall = np.array([[-2.0, 2.0, -2.0, 0.25], [-2.0, 0.25, -1.0, 0.25]])
     # gate [x, y, angle]
     gate = [[ 1.25, -0.50, 135.0],
             [ 0.25,  0.50, 135.0],
@@ -269,11 +265,11 @@ def aStarPlanning(sx, sy, gx, gy, z):
     plt.plot(rx, ry, "-r")
     p_x, p_y = pruning(rx, ry)
     plt.plot(p_x, p_y, "-b")
-    x, y, yaw = yaw_planning(p_x, p_y, obsMap, reso)
-    return x, y, yaw
+    z, yaw = yaw_z_planning(p_x, p_y, obsMap)
+    return p_x, p_y, z, yaw
 
 
-def yaw_planning(x, y, obsMap, reso):
+def yaw_z_planning(x, y, obsMap):
     '''
     choose the most possible marker to see
     '''
@@ -295,6 +291,7 @@ def yaw_planning(x, y, obsMap, reso):
 
     t = len(x)  # length of route
     yaw = [None for k in range(t)]
+    z = [None for k in range(t)]
     for i in range(t):
         id = None
         buf = [None for k in range(15)]
@@ -308,7 +305,7 @@ def yaw_planning(x, y, obsMap, reso):
             d = math.sqrt(dx**2 + dy**2)
 
             # for all markers, distance should be in proper range
-            if d < 0.4 or d > 1.5:
+            if d < 0.2 or d > 1.0:
                 flag = 1
                 continue
 
@@ -331,20 +328,23 @@ def yaw_planning(x, y, obsMap, reso):
                 if abs(degree - 180 - angle) > 60:
                     flag = 1
                     continue
-                else:
-                    d -= 0.3  # give more privilage to vertical sign
 
             if flag == 0:
                 buf[j] = degree
-                if d < d_buf:
+                if d < d_buf:  # choose closest marker
                     id = j
                     d_buf = d
 
-        # if don't find ideal marker
+        # if don't find ideal marker, face to the route,
         if id is None:
             print("don't find")
-            dx = x[i] - x[i - 1]
-            dy = y[i] - y[i - 1]
+            if i == 0:  # start point
+                dx = x[i+1] - x[i]
+                dy = y[i+1] - y[i]
+            if i == t-1:  # end point
+                dx = x[i] - x[i - 1]
+                dy = y[i] - y[i - 1]
+
             d = math.sqrt(dx**2 + dy**2)
             dx /= d  # normalize
             dy /= d
@@ -353,11 +353,20 @@ def yaw_planning(x, y, obsMap, reso):
             else:
                 yaw[i] = 360 - math.degrees(math.acos(dx))
 
+            # z planning
+            if i == 0:
+                z[i] = 0.41  # give middle height
+            else:
+                z[i] = z[i-1]
         else:
-            # save the nearest marker and yaw
+            # save the yaw of nearest marker
             yaw[i] = buf[id]
 
-    return x, y, yaw
+            if marker[id][4] == -90:  # vertical markers
+                z[i] = 0.3
+            elif marker[id][4] == 0:  # horizontal markers
+                z[i] = 0.5
+    return z, yaw
 
 
 def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
@@ -370,7 +379,7 @@ def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
         return Lx, Ly, Lyaw, 0.4
 
 
-x, y, yaw, height = a_star_layer(0.0, 0.5, -2.5, 0.9)
-#x, y, yaw = aStarPlanning(0.0, 0.5, -2.5, 0.9, 0.4)
-print(x, y, height)
+# x, y, yaw, height = a_star_layer(0.0, 0.5, -2.5, 0.9)
+x, y, z, yaw = aStarPlanning(0.0, 0.5, -2.9, 0.5, 0.4)
+print(x, y, z, yaw)
 plt.show()
