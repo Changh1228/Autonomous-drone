@@ -13,11 +13,7 @@ from crazyflie_driver.msg import Position, Hover
 from std_msgs.msg import Header
 
 class DroneMovement:
-    hover_publisher = None
-    position_publisher = None
-
-    tf_buf = None
-
+    '''
     a = [1.5, -0.75, 135]
     b = [0.5, 0.25, 135]
     c = [-1.25, 1.00, 180]
@@ -26,27 +22,29 @@ class DroneMovement:
     f = [-1.75, -0.75, 0]
     g = [0.00, -0.75, 45]
     h = [1.00, 0.25, 45]
-    path = [a, b, c, d, e, f, g, h]
-    path_ids = []
-
-    threshold = 0.01
-    degree_threshold = 5
-
-    clearance_distance = 1.0
-
-    waiting_time = 10 # seconds
-    starting_time = 0.0
-
-    goal = None
-    last_position_command = None
-    current_target = 0
-    passing_gate = False
-
-    checkpoints = []
+    '''
 
     def __init__(self, argv=sys.argv):
         rospy.init_node("drone_movement")
         rospy.loginfo("Starting DroneMovement.")
+
+        self.path = []
+        self.path_ids = []
+
+        self.threshold = 0.025
+        self.degree_threshold = 5
+
+        self.clearance_distance = 0.8
+
+        self.waiting_time = 5 # seconds
+        self.starting_time = 0.0
+
+        self.goal = None
+        self.last_position_command = None
+        self.current_target = 0
+        self.passing_gate = False
+
+        self.checkpoints = []
 
         self.hover_publisher  = rospy.Publisher("/cf1/cmd_hover", Hover, queue_size=2)
         self.position_publisher  = rospy.Publisher("/cf1/cmd_position", Position, queue_size=2)
@@ -80,6 +78,7 @@ class DroneMovement:
         self.checkpoints = []
 
         for i in range(len(path_x)):
+            '''
             if i + 1 < len(path_x):
                 diff = abs(path_yaw[i] - path_yaw[i + 1])
                 thresh = 30
@@ -117,6 +116,15 @@ class DroneMovement:
                 checkpoint.yaw = path_yaw[i]
 
                 self.checkpoints.append(checkpoint)
+            '''
+
+            checkpoint = Position()
+            checkpoint.x = path_x[i]
+            checkpoint.y = path_y[i]
+            checkpoint.z = 0.41
+            checkpoint.yaw = path_yaw[i]
+
+            self.checkpoints.append(checkpoint)
         
         self.goal = self.checkpoints[0]
         self.passing_gate = True
@@ -185,7 +193,6 @@ class DroneMovement:
             self.last_position_command = position_command
 
             self.position_publisher.publish(position_command)
-            print("Moving to goal")
 
     #----------------------------------------------------#
     #                  Callback functions                #
@@ -211,8 +218,11 @@ class DroneMovement:
         detected_position.z = msg_map.pose.position.z
         detected_position.yaw = yaw
 
+        print("expected position map: " + str(self.goal))
+        print("current position map: " + str(detected_position))
+
         if self.goal is None:
-            self.plan_path(detected_position, self.path[current_target])
+            self.plan_path(detected_position, self.path[self.current_target])
         else:
             anglediff = (detected_position.yaw - self.goal.yaw + 180 + 360) % 360 - 180
 
@@ -231,7 +241,8 @@ class DroneMovement:
                         other_side_of_gate.x = detected_position.x + self.clearance_distance * np.cos(angle_to_pass_gate)
                         other_side_of_gate.y = detected_position.y + self.clearance_distance * np.sin(angle_to_pass_gate)
                         other_side_of_gate.z = 0.41
-                        other_side_of_gate.yaw = self.path[self.current_target].yaw
+                        # other_side_of_gate.yaw = self.path[self.current_target].yaw
+                        other_side_of_gate.yaw = self.goal.yaw
 
                         print(other_side_of_gate)
 
