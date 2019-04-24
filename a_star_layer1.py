@@ -153,12 +153,52 @@ def calc_final_path(ngoal, closedset, reso):
     return rx, ry
 
 
+def pruning(rx, ry):  # kill the checkpoint in the middle of stright routine
+    # init
+    t = len(rx)
+    x = [rx[0]]  # start check point
+    y = [ry[0]]
+    direction = [[7, 8, 1],
+                 [6, 0, 2],
+                 [5, 4, 3]]
+    dir_buf = 0
+    flag = 0  # don't prune with short line
+    for i in range(t-1):
+        if rx[i+1]-rx[i] > 0:  # decide move direction
+            dx = 2
+        elif rx[i+1]-rx[i] == 0:
+            dx = 1
+        elif rx[i+1]-rx[i] < 0:
+            dx = 0
+        if ry[i+1]-ry[i] > 0:
+            dy = 0
+        elif ry[i+1]-ry[i] == 0:
+            dy = 1
+        elif ry[i+1]-ry[i] < 0:
+            dy = 2
+        dir = direction[dy][dx]
+        if dir_buf != 0 and dir_buf != dir:  # change moving direction
+            x.append(rx[i])
+            y.append(ry[i])
+            dir_buf = 0
+            flag = 0
+            #continue
+
+        dir_buf = dir
+        flag += 1
+
+    x.append(rx[t-1])  # keep the last checkpoint
+    y.append(ry[t-1])
+
+    return x, y
+
+
 def aStarPlanning(sx, sy, gx, gy, z):
     '''
     (sx,sy) (gx,gy) start point and goal point
     '''
     airSpace = [[-4, 2], [-2, 2]]
-    reso = 0.05  # Resolution = 10cm
+    reso = 0.1  # Resolution = 10cm
     len_x = int((airSpace[0][1] - airSpace[0][0]) / reso)
     len_y = int((airSpace[1][1] - airSpace[1][0]) / reso)
     nstart = Node(round(sx / reso), round(sy / reso), 0.0, -1)
@@ -226,8 +266,11 @@ def aStarPlanning(sx, sy, gx, gy, z):
                     openSet[nId] = node
 
     rx, ry = calc_final_path(ngoal, closeSet, reso)
-    rx, ry, ryaw = yaw_planning(rx, ry, obsMap, reso)
-    return rx, ry, ryaw
+    plt.plot(rx, ry, "-r")
+    p_x, p_y = pruning(rx, ry)
+    plt.plot(p_x, p_y, "-b")
+    x, y, yaw = yaw_planning(p_x, p_y, obsMap, reso)
+    return x, y, yaw
 
 
 def yaw_planning(x, y, obsMap, reso):
@@ -328,6 +371,6 @@ def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
 
 
 x, y, yaw, height = a_star_layer(0.0, 0.5, -2.5, 0.9)
-print(height)
-plt.plot(x, y, "-r")
+#x, y, yaw = aStarPlanning(0.0, 0.5, -2.5, 0.9, 0.4)
+print(x, y, height)
 plt.show()
