@@ -328,7 +328,12 @@ def yaw_z_planning(x, y, obsMap):
                 angle = marker[j][5] + 90  # orientation of marker(+-180)
                 if angle > 180:
                     angle -= 360
-                if abs(degree - 180 - angle) > 60:
+                #print(degree, angle)
+                d_angle = abs(degree - 180 - angle)
+                if d_angle >= 360:
+                    d_angle -= 360
+                #print(d_angle, j)
+                if d_angle > 60:
                     flag = 1
                     continue
 
@@ -383,7 +388,7 @@ def a_star_layer(sx, sy, gx, gy):  # choose layer in planning
 
 
 # x, y, yaw, height = a_star_layer(0.0, 0.5, -2.5, 0.9)
-x, y, z, yaw = aStarPlanning(-2.5, 1.5, -1.0, 1.5, 0.4)
+x, y, z, yaw = aStarPlanning(-2.5, -0.3, -3.4, 1.5, 0.4)
 print(x)
 print(y)
 print(z)
