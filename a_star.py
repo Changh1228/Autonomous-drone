@@ -178,29 +178,29 @@ def aStarPlanning(sx, sy, gx, gy):
     # wall [sx, sy, ex, ey, z]
     wall = [[-2.0, 2.0, -2.0, 0.25, 0.5], [-2.0, 0.25, -1.0, 0.25, 0.25]]
     # gate [x, y, angle]
-    gate = [[-2.50, -0.75,  90.0],
-            [-3.00,  1.50,   0.0],
-            [-1.00,  1.25, -90.0],
-            [-1.50, -0.750,-90.0],
+    gate = [[ 1.25, -0.50, 135.0],
+            [ 0.25,  0.50, 135.0],
+            [-1.50,  1.00, 180.0],
+            [-3.00,  0.50, 180.0],
+            [-2.50, -0.75, -90.0],
+            [-1.50, -0.75,   0.0],
             [ 0.25, -0.50,  45.0],
-            [ 1.25,  0.50,  45.0],
-            [ 1.25, -0.50, -45.0],
-            [ 0.25,  0.50, -45.0]]
+            [ 1.25,  0.50,  45.0]]
     # pose of marker [x, y, z, roll, pitch, yaw, ID]
-    marker = [[-2.50, -0.75, 0.10,  0.0, -90.0, -135.0, 1],
-              [-3.00,  1.50, 0.10,  0.0, -90.0,   90.0, 2],
-              [-1.00,  1.25, 0.10,  0.0, -90.0,    0.0, 3],
-              [-1.50, -0.75, 0.10,  0.0, -90.0,    0.0, 4],
-              [ 0.25, -0.50, 0.10,  0.0, -90.0,  135.0, 5],
-              [ 1.25,  0.50, 0.10,  0.0, -90.0,  135.0, 6],
-              [ 0.25,  0.50, 0.10,  0.0, -90.0,   45.0, 7],
-              [ 1.25, -0.50, 0.10,  0.0, -90.0,   45.0, 8],
+    marker = [[ 1.25, -0.50, 0.10,  0.0, -90.0, -135.0, 1],
+              [ 0.25,  0.50, 0.10,  0.0, -90.0, -135.0, 2],
+              [-1.50,  1.00, 0.10,  0.0, -90.0,  -90.0, 3],
+              [-3.00,  0.50, 0.10,  0.0, -90.0,  -90.0, 4],
+              [-2.50, -0.75, 0.10,  0.0, -90.0,    0.0, 5],
+              [-1.50, -0.75, 0.10,  0.0, -90.0,   90.0, 6],
+              [ 0.25, -0.50, 0.10,  0.0, -90.0,  135.0, 7],
+              [ 1.25,  0.50, 0.10,  0.0, -90.0,  135.0, 8],
               [-2.00,  0.00, 0.00, 90.0,   0.0,    0.0, 10],
               [-2.50,  0.50, 0.00, 90.0,   0.0,    0.0, 11],
               [-1.50,  0.50, 0.00, 90.0,   0.0,    0.0, 12],
               [-0.50,  0.50, 0.00, 90.0,   0.0,    0.0, 13],
               [-0.50,  0.00, 0.00, 90.0,   0.0,    0.0, 14],
-              [ 0.75,  1.25, 0.00, 90.0,   0.0,    0.0, 15]]
+              [ 2.00,  0.00, 0.00, 90.0,   0.0,    0.0, 15]]
 
     airSpace = [[-4, 2], [-2, 2]]
     reso = 0.1  # Resolution = 10cm
@@ -386,10 +386,10 @@ def yaw_planning(x, y, marker, wall, gatexy):
             if check_intersect([x,y], [marker[j][0], marker[j][1]], [w[0],w[1]], [w[2],w[3]]):
                 flag = 1
                 continue
-        for g in gatexy:  # gatexy [sx, sy, ex, ey]
+        '''for g in gatexy:  # gatexy [sx, sy, ex, ey]
             if check_intersect([x,y], [marker[j][0], marker[j][1]], [g[0],g[1]], [g[2],g[3]]):
                 flag = 1
-                continue
+                continue''' # disturb vertical marker checking
 
         # cal degree from drone to marker range(0-360)
         if d == 0:
@@ -406,16 +406,16 @@ def yaw_planning(x, y, marker, wall, gatexy):
             angle = marker[j][5] + 90  # orientation of marker(+-180)
             if angle > 180:
                 angle -= 360
-            #print(degree, angle)
             d_angle = abs(degree - 180 - angle)
+            #print(d_angle, marker[j][6])
             if d_angle >= 360:  # diff from drone to marker and marker orientation(+-180)
                 d_angle -= 360
             if d_angle > 60:
                 flag = 1
                 continue
-
         if flag == 0:
             buf[j] = degree
+
             if d < d_buf:  # choose closest marker
                 id = j
                 d_buf = d
@@ -449,7 +449,6 @@ def replanning(x, y, marker, wall, gatexy):
         yaw, z= yaw_planning(x[i], y[i], marker, wall, gatexy)
 
         if yaw == None:  # no best marker, face to next check point (danger if no best marker in last check point)
-            print("don't find")
             dx = x[i+1] - x[i]
             dy = y[i+1] - y[i]
             d = math.sqrt(dx**2 + dy**2)
@@ -505,8 +504,7 @@ def replanning(x, y, marker, wall, gatexy):
 
     return rpx, rpy, rpz, rpyaw
 
-x, y, z, yaw = aStarPlanning(-1.5, -0.5, -1.5, 0.5)
-print(check_intersect([-1.5, 0.5], [-2, -0], [-2, 0.25], [-1, 0.25]))
+x, y, z, yaw = aStarPlanning(1.7, -1.0, 1.5, -0.8)
 print(x)
 print(y)
 print(z)
