@@ -17,17 +17,58 @@ from collections import deque
 
 meas_len = 6
 aruco_queue = deque(maxlen = meas_len)
-
-'''
-solved problem in doing average of quaternion
-please, no bugs
-'''
+detect = [PoseStamped(), 0]  #pose and its id
 
 def transform_callback(data):
+    global tf_buf, tf_lstn
+
     # update pose of aruco (camera_link)
-    global aruco_queue
+    global aruco_queue, detect, ID
     aruco_queue.append(data)
 
+    ID = pre_aruco(aruco_queue)  # pre preprocess for marker(find best id)
+    '''goa = PoseStamped()
+    goa.header.stamp = data.header.stamp
+    goa.header.frame_id = "cf1/camera_link"
+    result = tf_buf.transform(goa, 'cf1/odom')'''
+    if ID > 0:# and tf_buf.can_transform(data.header.frame_id, 'cf1/odom',  data.header.stamp, timeout = rospy.Duration(0.2)):
+        # good preprocess and we have intime tf data.header.stamp, timeout = rospy.Duration(1.2)
+        p_x = []
+        p_y = []
+        p_z = []
+        quaternion = []
+        for timestamp in aruco_queue:  # in one timestamp
+            for aruco in timestamp.markers:
+                if aruco.id == ID: # check the ID we want
+                    goal = PoseStamped()
+                    goal.header.stamp = aruco.header.stamp
+                    goal.header.frame_id = "cf1/camera_link"
+                    goal.pose = aruco.pose.pose
+                    result = tf_buf.transform(goal, 'cf1/odom')
+
+                    # average
+                    p_x.append(result.pose.position.x)
+                    p_y.append(result.pose.position.y)
+                    p_z.append(result.pose.position.z)
+                    quaternion.append([result.pose.orientation.x,
+                                       result.pose.orientation.y,
+                                       result.pose.orientation.z,
+                                       result.pose.orientation.w])
+        x, y, z, ox, oy, oz, ow = quaternion_average(p_x, p_y, p_z, quaternion)
+        meas = PoseStamped()
+        meas.header.stamp = data.header.stamp
+        meas.header.frame_id = "cf1/odom"
+        meas.pose.position.x = x
+        meas.pose.position.y = y
+        meas.pose.position.z = z
+        meas.pose.orientation.x = ox
+        meas.pose.orientation.y = oy
+        meas.pose.orientation.z = oz
+        meas.pose.orientation.w = ow
+        detect = [meas, ID]
+        print(detect)
+    else:
+        print("no intime tf")
 
 def read_from_json(m):
     t = PoseStamped()
@@ -77,22 +118,28 @@ def quaternion_average(x, y, z, quaternion):
 
 
 def pre_aruco(aruco_queue):
-    '''preprocess the data form camera: delete the outlier and choose nearest markers'''
+    '''preprocess the data form camera: choose most proper marker'''
     global meas_len
     k = len(aruco_queue)
     if k < meas_len:  # if no enough data in queue, quit
-        return PoseStamped(), -2  # return 0, -2 for localization to recognize
+        print("no enough data in queue")
+        return -1
     # choose nearest marker
     flag = 0  # flag of rejecting low quality marker
     record = np.zeros(16)
     for data in aruco_queue: # data in same timestamp
         d = 10000
         id = None
+        if abs(data.header.stamp.secs - rospy.Time.now().secs) > 2:
+            # there is data from 2 sec before, quit
+            print("old data")
+            return -2
+
         for aruco in data.markers:  # for all markers
             if aruco.id > 15 or aruco.id < 1:  # reject wrong id
                 continue
-            d_now = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2) + pow(aruco.pose.pose.position.z, 2)
-            if d_now < 0.1:  # check if marker in proper distance
+            d_now = math.sqrt(aruco.pose.pose.position.x**2 + aruco.pose.pose.position.y**2 + aruco.pose.pose.position.z**2)
+            if d_now < 0.2:  # check if marker in proper distance
                 flag = 1
                 continue
             degree = math.atan2(aruco.pose.pose.position.x, aruco.pose.pose.position.z)
@@ -106,62 +153,13 @@ def pre_aruco(aruco_queue):
         record[id] += 1
 
     if id == None and flag == 1:  # the only marker seen is low quality
-        return PoseStamped(), -1  # return 0, 0 for localization to recognize
+        print("bad marker")
+        return -3
 
     nearest_ID = np.where(record==np.max(record))  # nearest Aruco ID
     nearest_ID = nearest_ID[0][0]
 
-    # delete the outlier (largest and smallest distance)
-    # and average nearest_ID
-    distance = np.zeros(k)
-    t = 0
-    for data in aruco_queue: # data in same timestamp
-        for aruco in data.markers:  # for all markers
-            if aruco.id == nearest_ID:  # only care about nearest marker
-                distance[t] = pow(aruco.pose.pose.position.x, 2) + pow(aruco.pose.pose.position.y, 2)
-        t += 1
-    largest_stamp = np.where(distance==np.max(distance))  # largest timestamp
-    largest_stamp = largest_stamp[0][0]
-    smallest_stamp = np.where(distance==np.min(distance))  # smallest timestamp
-    smallest_stamp = smallest_stamp[0][0]
-
-    # average
-    t = 0
-    p_x = []
-    p_y = []
-    p_z = []
-    quaternion = []
-
-    for data in aruco_queue: # data in same timestamp
-        if t!=largest_stamp and t!=smallest_stamp:
-            for aruco in data.markers:  # for all markers
-                if aruco.id == nearest_ID:  # only care about nearest marker
-                    p_x.append(aruco.pose.pose.position.x)
-                    p_y.append(aruco.pose.pose.position.y)
-                    p_z.append(aruco.pose.pose.position.z)
-                    quaternion.append([aruco.pose.pose.orientation.x,
-                                       aruco.pose.pose.orientation.y,
-                                       aruco.pose.pose.orientation.z,
-                                       aruco.pose.pose.orientation.w])
-
-        t += 1
-    '''if len(p_x) < meas_len-2:
-        return PoseStamped(), -2'''
-
-    x, y, z, ox, oy, oz, ow = quaternion_average(p_x, p_y, p_z, quaternion)
-    result = PoseStamped()
-    result.header.stamp = aruco_queue[k-1].header.stamp  # use time at middle stamp
-    result.header.frame_id = "cf1/camera_link"
-    result.pose.position.x = x
-    result.pose.position.y = y
-    result.pose.position.z = z
-    result.pose.orientation.x = ox
-    result.pose.orientation.y = oy
-    result.pose.orientation.z = oz
-    result.pose.orientation.w = ow
-
-    #print(result, nearest_ID)
-    return result, nearest_ID
+    return nearest_ID
 
 
 def pub_tf(x, y, oz, ow):
@@ -185,18 +183,15 @@ def pub_tf(x, y, oz, ow):
     tfO2M.transform.rotation.w = ow
     br.sendTransform(tfO2M)
     (roll, pitch, yaw) = euler_from_quaternion((0.0, 0.0, oz, ow))
-    #print(x, y, oz, ow, yaw)
+    print(x, y, oz, ow, yaw)
 
 
 def localization(argv):
 
-    global aruco_queue
+    global detect
     d_buf = None
 
-    tf_buf   = tf2_ros.Buffer()
-    tf_lstn  = tf2_ros.TransformListener(tf_buf)
-
-    queue_len = 6  # length of tf queue
+    queue_len = 15  # length of tf queue
     queue = deque(maxlen = queue_len)
 
     # Load world JSON
@@ -209,16 +204,14 @@ def localization(argv):
 
     # save initial tf
 
-    rate = rospy.Rate(10)  # Hz
+    rate = rospy.Rate(30)  # Hz
     print('localization running')
 
     flag = 0  # flag for first running
 
     while not rospy.is_shutdown():
-        # deepcopy to prevent value change when preprocess
-        aruco_marker, aruco_ID = pre_aruco(copy.deepcopy(aruco_queue))
-        pub_flag = 0  # make sure no mutiple update of tf
 
+        pub_flag = 0  # make sure no mutiple update of tf
         # publish initial tf
         if flag == 0:  # run localization for the first time
             if pub_flag == 0:
@@ -230,9 +223,7 @@ def localization(argv):
                 pub_flag = 1
                 print("publish init tf")
 
-        # already has a tf
-        #    publih last tf
-        elif (rospy.Time.now().secs - aruco_marker.header.stamp.secs) > 1:
+        elif (rospy.Time.now().secs - detect[0].header.stamp.secs) < 0:
             # data form 2s before or not in good pose(aruco_marker = PoseStamped, sec = 0)
             if pub_flag == 0:
                 trans_x = trans_x
@@ -241,41 +232,29 @@ def localization(argv):
                 trans_ow = trans_ow
                 pub_flag = 1
                 print("publish last tf (old tf or bad marker)")
-                print(aruco_ID)
-
-        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp):
-            if pub_flag == 0:
-                trans_x = trans_x
-                trans_y = trans_y
-                trans_oz = trans_oz
-                trans_ow = trans_ow
-                pub_flag = 1
-                print("publish last tf (no intime tf)")
+                print(detect[1])# !!! theorictly it should not happens
 
         # publish a new tf
-        else:
+        elif detect[1] > 0:
             # ---------------do localization ----------------
-            # transform pose in camera link to odm link
-            #aruco_marker.header.stamp = rospy.Time(0)
-            aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(1.0))
             # calculate the difference (true_pose detect_pose)
-            quat = [aruco_map_pose[aruco_ID].pose.orientation.x,
-                    aruco_map_pose[aruco_ID].pose.orientation.y,
-                    aruco_map_pose[aruco_ID].pose.orientation.z,
-                    aruco_map_pose[aruco_ID].pose.orientation.w]
+            quat = [aruco_map_pose[detect[1]].pose.orientation.x,
+                    aruco_map_pose[detect[1]].pose.orientation.y,
+                    aruco_map_pose[detect[1]].pose.orientation.z,
+                    aruco_map_pose[detect[1]].pose.orientation.w]
             T_m2a = quaternion_matrix(quat)
-            T_m2a[0][3] = aruco_map_pose[aruco_ID].pose.position.x
-            T_m2a[1][3] = aruco_map_pose[aruco_ID].pose.position.y
-            T_m2a[2][3] = aruco_map_pose[aruco_ID].pose.position.z
+            T_m2a[0][3] = aruco_map_pose[detect[1]].pose.position.x
+            T_m2a[1][3] = aruco_map_pose[detect[1]].pose.position.y
+            T_m2a[2][3] = aruco_map_pose[detect[1]].pose.position.z
 
-            quat2 = [aruco_odm_pose.pose.orientation.x,
-                     aruco_odm_pose.pose.orientation.y,
-                     aruco_odm_pose.pose.orientation.z,
-                     aruco_odm_pose.pose.orientation.w]
+            quat2 = [detect[0].pose.orientation.x,
+                     detect[0].pose.orientation.y,
+                     detect[0].pose.orientation.z,
+                     detect[0].pose.orientation.w]
             T_o2a = quaternion_matrix(quat2)
-            T_o2a[0][3] = aruco_odm_pose.pose.position.x
-            T_o2a[1][3] = aruco_odm_pose.pose.position.y
-            T_o2a[2][3] = aruco_odm_pose.pose.position.z
+            T_o2a[0][3] = detect[0].pose.position.x
+            T_o2a[1][3] = detect[0].pose.position.y
+            T_o2a[2][3] = detect[0].pose.position.z
 
             T_inv = np.linalg.inv(T_o2a)
             T_m2o = np.matmul(T_m2a, T_inv)
@@ -289,7 +268,7 @@ def localization(argv):
 
             (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
 
-            print(position_x, position_y, o_z, o_w)
+            #print(position_x, position_y, o_z, o_w)
             # cal time average
             queue.append([position_x, position_y, position_z, o_x, o_y, o_z, o_w])
             timeAve_x = []
@@ -314,16 +293,18 @@ def localization(argv):
                 pub_flag = 1
                 print("publish new tf")
 
-        if pub_flag == 1: # updat a tf in this loop
+        #if pub_flag == 1: # updat a tf in this loop
 
-            pub_tf(trans_x, trans_y, trans_oz, trans_ow)
-            rate.sleep()
+        pub_tf(trans_x, trans_y, trans_oz, trans_ow)
+        rate.sleep()
+
+
+rospy.init_node('localization', anonymous=True)
+rospy.Subscriber('/aruco/markers', MarkerArray, transform_callback)
+tf_buf   = tf2_ros.Buffer()
+tf_lstn  = tf2_ros.TransformListener(tf_buf)
 
 def main(argv=sys.argv):
-
-    rospy.init_node('localization', anonymous=True)
-
-    rospy.Subscriber('/aruco/markers', MarkerArray, transform_callback)
 
     localization(argv)
 
