@@ -5,6 +5,7 @@ import sys
 import json
 import numpy as np
 import rospy
+import tf
 import tf2_ros
 import tf2_geometry_msgs
 from tf.transformations import euler_from_quaternion, quaternion_from_euler, quaternion_matrix, euler_from_matrix, quaternion_from_matrix
@@ -197,6 +198,7 @@ def localization(argv):
 
     tf_buf   = tf2_ros.Buffer()
     tf_lstn  = tf2_ros.TransformListener(tf_buf)
+    tf_listener = tf.TransformListener()
 
     queue_len = 15  # length of tf queue
     queue = deque(maxlen = queue_len)
@@ -215,6 +217,7 @@ def localization(argv):
     print('localization running')
 
     flag = 0  # flag for first running
+    tf_flag = 0  # flag for strange no intime tf
 
     while not rospy.is_shutdown():
         # deepcopy to prevent value change when preprocess
@@ -245,76 +248,77 @@ def localization(argv):
                 print("publish last tf (old tf or bad marker)")
                 print(aruco_ID)
 
-        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp, timeout = rospy.Duration(0.3)):
-            if pub_flag == 0:
-                trans_x = trans_x
-                trans_y = trans_y
-                trans_oz = trans_oz
-                trans_ow = trans_ow
-                pub_flag = 1
-                print("publish last tf (no intime tf)")
-
         # publish a new tf
         else:
             # ---------------do localization ----------------
             # transform pose in camera link to odm link
-            #aruco_marker.header.stamp = rospy.Time(0)
-            aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(0.2))
+            try:
+                tf_listener.waitForTransform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp, rospy.Duration(0.2))
+                aruco_odm_pose = tf_buf.transform(aruco_marker, 'cf1/odom', rospy.Duration(0.2))
+            except (tf2_ros.TransformException):
+                if pub_flag == 0:
+                    trans_x = trans_x
+                    trans_y = trans_y
+                    trans_oz = trans_oz
+                    trans_ow = trans_ow
+                    pub_flag = 1
+                    print("publish last tf (no intime tf)")
             # calculate the difference (true_pose detect_pose)
-            quat = [aruco_map_pose[aruco_ID].pose.orientation.x,
-                    aruco_map_pose[aruco_ID].pose.orientation.y,
-                    aruco_map_pose[aruco_ID].pose.orientation.z,
-                    aruco_map_pose[aruco_ID].pose.orientation.w]
-            T_m2a = quaternion_matrix(quat)
-            T_m2a[0][3] = aruco_map_pose[aruco_ID].pose.position.x
-            T_m2a[1][3] = aruco_map_pose[aruco_ID].pose.position.y
-            T_m2a[2][3] = aruco_map_pose[aruco_ID].pose.position.z
-
-            quat2 = [aruco_odm_pose.pose.orientation.x,
-                     aruco_odm_pose.pose.orientation.y,
-                     aruco_odm_pose.pose.orientation.z,
-                     aruco_odm_pose.pose.orientation.w]
-            T_o2a = quaternion_matrix(quat2)
-            T_o2a[0][3] = aruco_odm_pose.pose.position.x
-            T_o2a[1][3] = aruco_odm_pose.pose.position.y
-            T_o2a[2][3] = aruco_odm_pose.pose.position.z
-
-            T_inv = np.linalg.inv(T_o2a)
-            T_m2o = np.matmul(T_m2a, T_inv)
-            position_x = T_m2o[0][3]
-            position_y = T_m2o[1][3]
-            position_z = T_m2o[2][3]
-
-            T_m2o[0][3] = 0
-            T_m2o[1][3] = 0
-            T_m2o[2][3] = 0
-
-            (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
-
-            #print(position_x, position_y, o_z, o_w)
-            # cal time average
-            queue.append([position_x, position_y, position_z, o_x, o_y, o_z, o_w])
-            timeAve_x = []
-            timeAve_y = []
-            timeAve_z = []
-            timeAve_quat = []
-
-            for i in queue:
-                timeAve_x.append(i[0])
-                timeAve_y.append(i[1])
-                timeAve_z.append(i[2])
-                timeAve_quat.append([i[3], i[4], i[5], i[6]])
-
-            mean_x, mean_y, mean_z, mean_ox, mean_oy, mean_oz, mean_ow = quaternion_average(timeAve_x, timeAve_y, timeAve_z, timeAve_quat)
-
-            # TF form odm to map
             if pub_flag == 0:
-                trans_x = mean_x
-                trans_y = mean_y
-                trans_oz = mean_oz
-                trans_ow = mean_ow
-                pub_flag = 1
-                print("publish new tf")
+                quat = [aruco_map_pose[aruco_ID].pose.orientation.x,
+                        aruco_map_pose[aruco_ID].pose.orientation.y,
+                        aruco_map_pose[aruco_ID].pose.orientation.z,
+                        aruco_map_pose[aruco_ID].pose.orientation.w]
+                T_m2a = quaternion_matrix(quat)
+                T_m2a[0][3] = aruco_map_pose[aruco_ID].pose.position.x
+                T_m2a[1][3] = aruco_map_pose[aruco_ID].pose.position.y
+                T_m2a[2][3] = aruco_map_pose[aruco_ID].pose.position.z
+
+                quat2 = [aruco_odm_pose.pose.orientation.x,
+                        aruco_odm_pose.pose.orientation.y,
+                        aruco_odm_pose.pose.orientation.z,
+                        aruco_odm_pose.pose.orientation.w]
+                T_o2a = quaternion_matrix(quat2)
+                T_o2a[0][3] = aruco_odm_pose.pose.position.x
+                T_o2a[1][3] = aruco_odm_pose.pose.position.y
+                T_o2a[2][3] = aruco_odm_pose.pose.position.z
+
+                T_inv = np.linalg.inv(T_o2a)
+                T_m2o = np.matmul(T_m2a, T_inv)
+                position_x = T_m2o[0][3]
+                position_y = T_m2o[1][3]
+                position_z = T_m2o[2][3]
+
+                T_m2o[0][3] = 0
+                T_m2o[1][3] = 0
+                T_m2o[2][3] = 0
+
+                (o_x, o_y, o_z, o_w) = quaternion_from_matrix(T_m2o)
+
+                #print(position_x, position_y, o_z, o_w)
+                # cal time average
+                queue.append([position_x, position_y, position_z, o_x, o_y, o_z, o_w])
+                timeAve_x = []
+                timeAve_y = []
+                timeAve_z = []
+                timeAve_quat = []
+
+                for i in queue:
+                    timeAve_x.append(i[0])
+                    timeAve_y.append(i[1])
+                    timeAve_z.append(i[2])
+                    timeAve_quat.append([i[3], i[4], i[5], i[6]])
+
+                mean_x, mean_y, mean_z, mean_ox, mean_oy, mean_oz, mean_ow = quaternion_average(timeAve_x, timeAve_y, timeAve_z, timeAve_quat)
+
+                # TF form odm to map
+                if pub_flag == 0:
+                    trans_x = mean_x
+                    trans_y = mean_y
+                    trans_oz = mean_oz
+                    trans_ow = mean_ow
+                    pub_flag = 1
+                    print("publish new tf")
 
         #if pub_flag == 1: # updat a tf in this loop
 
