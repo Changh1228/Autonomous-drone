@@ -22,11 +22,11 @@ class DroneMovement:
         self.threshold = 0.01
         self.degree_threshold = 5
 
-        self.clearance_distance = 0.8
+        self.clearance_distance = 0.9
 
         self.goal = None
         self.last_position_command = None
-        self.current_target = 2
+        self.current_target = 0
         self.passing_gate = False
 
         self.checkpoints = []
@@ -163,7 +163,7 @@ class DroneMovement:
         target.pose.position.z = self.goal.z
         target.pose.orientation.x, target.pose.orientation.y, target.pose.orientation.z, target.pose.orientation.w = quaternion_from_euler(0, 0, np.deg2rad(self.goal.yaw))
 
-        if not self.tf_buf.can_transform("cf1/odom", "map", target.header.stamp, timeout=rospy.Duration(0.2)):
+        if not self.tf_buf.can_transform("cf1/odom", "map", target.header.stamp, timeout=rospy.Duration(0.3)):
             rospy.logwarn_throttle(5.0, "No transform from map to odom")
             
             # Send last command
@@ -174,7 +174,7 @@ class DroneMovement:
                 self.hover_in_place(0.0)
                 print("Hovering")
         else:
-            target_odom = self.tf_buf.transform(target, "cf1/odom", rospy.Duration(0.2))
+            target_odom = self.tf_buf.transform(target, "cf1/odom", rospy.Duration(0.3))
 
             roll, pitch, yaw = euler_from_quaternion((target_odom.pose.orientation.x,
                                                 target_odom.pose.orientation.y,
@@ -203,11 +203,11 @@ class DroneMovement:
     #----------------------------------------------------#
 
     def pose_callback(self, msg):
-        if not self.tf_buf.can_transform("map", msg.header.frame_id, msg.header.stamp, timeout=rospy.Duration(0.2)):
+        if not self.tf_buf.can_transform("map", msg.header.frame_id, msg.header.stamp, timeout=rospy.Duration(0.3)):
             rospy.logwarn_throttle(5.0, "No transform from %s to map" % msg.header.frame_id)
             return
 
-        msg_map = self.tf_buf.transform(msg, "map", rospy.Duration(0.2))
+        msg_map = self.tf_buf.transform(msg, "map", rospy.Duration(0.3))
 
         roll, pitch, yaw = euler_from_quaternion((msg_map.pose.orientation.x,
                                               msg_map.pose.orientation.y,
@@ -233,8 +233,6 @@ class DroneMovement:
 
             if self.goal.x + self.threshold > detected_position.x > self.goal.x - self.threshold and self.goal.y + self.threshold > detected_position.y > self.goal.y - self.threshold and self.goal.z + self.threshold > detected_position.z > self.goal.z - self.threshold and anglediff <= self.degree_threshold and anglediff >= -self.degree_threshold:
             # if self.goal.x + self.threshold > detected_position.x > self.goal.x - self.threshold and self.goal.y + self.threshold > detected_position.y > self.goal.y - self.threshold and self.goal.z + self.threshold > detected_position.z > self.goal.z - self.threshold:
-                print(idx)
-                
                 if idx != -1 and idx < len(self.checkpoints) - 1:
                     self.goal = self.checkpoints[idx + 1]
                     print("Next checkpoint")

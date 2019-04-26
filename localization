@@ -211,7 +211,7 @@ def localization(argv):
 
     # save initial tf
 
-    rate = rospy.Rate(30)  # Hz
+    rate = rospy.Rate(10)  # Hz
     print('localization running')
 
     flag = 0  # flag for first running
@@ -245,7 +245,7 @@ def localization(argv):
                 print("publish last tf (old tf or bad marker)")
                 print(aruco_ID)
 
-        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp, timeout = rospy.Duration(0.2)):
+        elif not tf_buf.can_transform(aruco_marker.header.frame_id, 'cf1/odom', aruco_marker.header.stamp, timeout = rospy.Duration(0.3)):
             if pub_flag == 0:
                 trans_x = trans_x
                 trans_y = trans_y
