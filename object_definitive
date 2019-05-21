@@ -270,7 +270,6 @@ class ImageWorker:
 
 
     def classifySign(self, image):
-        #print('IM CLASSIFYING!!! YAYA')
         model = self.singelModel
         classNames = ['airport',
                         'dangerous_curve_left',
