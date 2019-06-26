@@ -23,3 +23,11 @@ The project was divided in mainly three tasks:
 The perception task is developed in [Perception](scripts/perception) subfolder while the latter two are developed in [Navigation](scripts/navigation) subfolder. Each of the subfolders contain another README file focusing on each of the parts and the code developed there.
 
 The final video of the drone in action is the following:
+
+## How to run the program
+The project was developed using Python 2, so a Python 2 interpreter is required. The reader can use the launch files located in the [launch](launch) folder to run the different nodes of the project using the command:
+
+```
+$ roslaunch package_name file.launch
+```
+where package_name is the name of the Catkin package where the launch file is.
