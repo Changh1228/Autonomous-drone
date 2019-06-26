@@ -16,6 +16,6 @@ The project was divided in mainly three tasks:
   <li><b>Navigation:</b> Being able to navigate over the 3D track.</li>
 </ul>
 
-The perception task is developed in Perception subfolder while the latter two are developed in Navigation subfolder. Each of the subfolders contain another README file focusing on each of the parts and the code developed there.
+The perception task is developed in [Perception](scripts/perception) subfolder while the latter two are developed in [Navigation](scripts/navigation) subfolder. Each of the subfolders contain another README file focusing on each of the parts and the code developed there.
 
 The final video of the drone in action is the following:
