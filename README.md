@@ -31,3 +31,4 @@ The project was developed using Python 2, so a Python 2 interpreter is required.
 $ roslaunch package_name file.launch
 ```
 where package_name is the name of the Catkin package where the launch file is.
+Some of the nodes were runned outside the launch file as major problems occurred when running all of them at the same time but this is explained in more detail in each task subsection.
