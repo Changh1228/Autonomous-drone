@@ -8,7 +8,10 @@ This repository was created for a project course in the department of Electrical
 In addition to gates there could be any number of other obstacles in the environment. An obstacle consists of one or several thin vertical walls. By thin here means something on the order of cardboard. It is thin to reduce the disturbance that the height sensor of the drone gets from it.
 
 The drone used for this course was the Crazyflie, which is a small unmanned aerial vehicle (UAV) produced by the company <a href="https://www.bitcraze.io/">Bitcraze</a> and was programed using Python alongside ROS (Robotics Operation System).
-
+<p align="center">
+    <img src="media/crazyflie.jpg" alt>
+    <em>Figure 2 - Crazyflie design.</em>
+</p>
 The project was divided in mainly three tasks:
 <ul>
   <li><b>Perception:</b> Being able to recognize the traffic signs and determine their position in the global map.</li>
