@@ -12,6 +12,7 @@ The drone used for this course was the Crazyflie, which is a small unmanned aeri
     <img src="media/crazyflie.jpg" alt>
     <em>Figure 2 - Crazyflie design.</em>
 </p>
+
 The project was divided in mainly three tasks:
 <ul>
   <li><b>Perception:</b> Being able to recognize the traffic signs and determine their position in the global map.</li>
