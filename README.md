@@ -6,12 +6,37 @@ This repository was created for a project course in the department of Electrical
 </p>
 In addition to gates there could be any number of other obstacles in the environment. An obstacle consists of one or several thin vertical walls. By thin here means something on the order of cardboard. It is thin to reduce the disturbance that the height sensor of the drone gets from it.
 
-The drone used for this course was the Crazyflie, which is a small unmanned aerial vehicle (UAV) produced by the company <a href="https://www.bitcraze.io/">Bitcraze</a> and was programed using Python alongside ROS (Robotics Operation System).
+## Hardware
+The drone used for this course was the Crazyflie, which is a small unmanned aerial vehicle (UAV) produced by the company <a href="https://www.bitcraze.io/">Bitcraze</a> and was programed using Python alongside ROS (Robotics Operation System).  
+<ul>
+    <li><a href="https://store.bitcraze.io/collections/kits/products/crazyflie-2-0">Crazyflie 2.0</a>
+    <p align="center">
+        <img width="500"  src="https://cdn.shopify.com/s/files/1/1028/5387/products/Crazyflie2.0-2400px-1_1024x1024.JPG?v=1481037207">
+    </p>
+    <li><a href="https://store.bitcraze.io/collections/kits/products/crazyradio-pa">Crazyradio PA 2.4 GHz USB dongle</a>
+    <p align="center">
+        <img width="500"  src="https://cdn.shopify.com/s/files/1/1028/5387/products/Radio-PA-2400px-5_1024x1024.JPG?v=1467966118">
+    </p>
+    <li><a href="https://store.bitcraze.io/collections/decks/products/flow-deck-v2">Flow deck v2</a>
+    <p align="center">
+        <img width="500"  src="https://cdn.shopify.com/s/files/1/1028/5387/products/Flow_deck_v2_1200px-1_1024x1024.jpg?v=1539600469">
+    </p>
+    <li><a href="https://hobbyking.com/en_us/vm275t-5-8ghz-25mw-48ch-ntsc-pal-mini-vtx-600tvl-fpv-camera-micro-fpv-cloverleaf-antenna.html?___store=en_us">VM275T 5.8GHz 25mW 48CH NTSC/PAL Mini VTX 600TVL FPV Camera</a>
+    <p align="center">
+        <img width="500"  src="https://cdn-global-hk.hobbyking.com/media/catalog/product/cache/1/image/660x415/17f82f742ffe127f42dca9de82fb58b1/1/1/115246u.jpg">
+    </p>
+    <li><a href="https://www.banggood.com/Eachine-ROTG01-UVC-OTG-5_8G-150CH-Full-Channel-FPV-Receiver-For-Android-Mobile-Phone-Smartphone-p-1147692.html?ID=224&cur_warehouse=CN"> Video receiver</a>
+    <p align="center">
+    <img width="500"  src="media/camera_receiver.png">
+</p>
+</ul>   
+With everything fixed together, the drone look like this:
 <p align="center">
-    <img src="media/crazyflie.jpg" alt>
+    <img width="500"  src="media/drone.jpg">
 </p>
 
 
+## Tasks
 The project was divided in mainly three tasks:
 <ul>
   <li><b>Perception:</b> Being able to recognize the traffic signs and determine their position in the global map.</li>
