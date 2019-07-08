@@ -32,3 +32,6 @@ $ roslaunch package_name file.launch
 ```
 where package_name is the name of the Catkin package where the launch file is.
 Some of the nodes were runned outside the launch file as major problems occurred when running all of them at the same time but this is explained in more detail in each task subsection.
+
+## Demo video and tests
+[![Watch the video](media/Video_Cover.png)](https://v.youku.com/v_show/id_XNDI2NDc3OTcwOA==.html?spm=a2h3j.8428770.3416059.1)
