@@ -37,4 +37,4 @@ where package_name is the name of the Catkin package where the launch file is.
 Some of the nodes were runned outside the launch file as major problems occurred when running all of them at the same time but this is explained in more detail in each task subsection.
 
 ## Demo video and tests
-[![Watch the video](media/Video_Cover.png)](https://v.youku.com/v_show/id_XNDI2NDc3OTcwOA==.html?spm=a2h3j.8428770.3416059.1)
+[![Watch the video](https://i.ytimg.com/vi/9gpehy5qDU0/hqdefault.jpg?sqp=-oaymwEZCNACELwBSFXyq4qpAwsIARUAAIhCGAFwAQ==&rs=AOn4CLBAcRYRoR26gdCcJ9KN0x9wt4Qoag)](https://www.youtube.com/watch?v=9gpehy5qDU0&t=1s)
