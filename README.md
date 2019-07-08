@@ -51,6 +51,8 @@ The block diogram of the system design(including the three tasks) is shown as fo
 
 The perception task is developed in [Perception](scripts/perception) subfolder while the latter two are developed in [Navigation](scripts/navigation) subfolder. Each of the subfolders contain another README file focusing on each of the parts and the code developed there.
 
+## Preparations before these code
+Before you running the code from this repo, there are some base code and requirements. Check this <a href="https://kth.instructure.com/courses/8291/pages/linux-installation">page</a> 
 
 ## How to run the program
 The project was developed using Python 2, so a Python 2 interpreter is required. The reader can use the launch files located in the [launch](launch) folder to run the different nodes of the project using the command:
