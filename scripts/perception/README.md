@@ -16,3 +16,6 @@ When the program is stopped the matrix is converted to CSV format.
 
 ## Scripts description
 
+## Demo with provided rosbag
+Click image to play the video => [![Watch the video](https://i.ytimg.com/vi/7OHdB9czP5c/hqdefault.jpg?sqp=-oaymwEZCNACELwBSFXyq4qpAwsIARUAAIhCGAFwAQ==&rs=AOn4CLDpKAXlbvoTF-pU6inIFIdQptRv6g)](https://www.youtube.com/watch?v=7OHdB9czP5c)
+
