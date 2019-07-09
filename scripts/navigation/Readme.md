@@ -1,2 +1,13 @@
 # Navigation
 ## Introduction
+In the navigation part, the structure is a loop shape. After taking off, the position of the drone is decided by localization. Then the goal point is set to be in front of the gate. Then A_Star planning is used to plan the path the reach the goal without crushing in to the obstacle. To speed up the process of following the path, a pruning algorithm is used to kill the checkpoint in the middle of a straight line in path. In addition, we want to localize our drone when it is following the routine. We do yaw planning so that the drone can face to the best marker in each checkpoint. Also, since some gate are in certain place so we have to cross a wall, we do height planning, so when two checkpoints are in each side of a wall, we increase the height of drone (0.2m) so that it can cross wall from above. Then we just follow our plan and using localization to make sure we arrive the checkpoint before we move to another. When the drone arrives the end of path, which should be in front of gate, we do “pass gate”. Then the drone will go directly to the checkpoint behind the gate. And come back to the start of loop again, which is path planning.
+## Approch taken
+<ul>
+  <li><b>Localization:</b> In order to know position of drone according to the map, <a href="https://docs.opencv.org/3.1.0/d5/dae/tutorial_aruco_detection.html"> Aruco markers</a> were used. The position of the aruco markers in the map is known. Then the position of the markers according to the camera is given by the aruco detection in the base code provided by teaching group. Then using simple kinematics we can get  <a href="https://studywolf.wordpress.com/2013/08/21/robot-control-forward-transformation-matrices/"> transfer matrix</a> from map to aruco(<b>Tm-a</b>) and from camera to aruco(<b>Tc-a</b>). Also, we know the parameters of camera mount so transfer matrix from drone to aruco(<b>Td-a</b>) is easy to get by (<b>Td-c x Tc-a</b>). Then we can get the transfer matrix from drone to map (<b>Td-m = Td-a / Tm-a</b>). The position of drone can get from this matrix. </li>
+  
+  <li><b>Path planning:</b> Being able to determine the drone's position in the known map making use of the AruCo markers, whose position is known.</li>
+</ul>
+
+## System test with and without localication
+With Localization => [![Watch the video](https://i.ytimg.com/vi/5jr3k8XeNa8/hqdefault.jpg?sqp=-oaymwEZCNACELwBSFXyq4qpAwsIARUAAIhCGAFwAQ==&rs=AOn4CLCKjyK_645n_V81Bb0FyEXOO4Q9lQ)](https://www.youtube.com/watch?v=5jr3k8XeNa8)  
+Without Localization => [![Watch the video](https://i.ytimg.com/vi/2B_A5JpAlZ0/hqdefault.jpg?sqp=-oaymwEZCNACELwBSFXyq4qpAwsIARUAAIhCGAFwAQ==&rs=AOn4CLAJWrAVUbBiMTuYWiQqys9CqkriKw)](https://www.youtube.com/watch?v=2B_A5JpAlZ0)
