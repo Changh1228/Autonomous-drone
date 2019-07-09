@@ -32,7 +32,7 @@ The drone used for this course was the Crazyflie, which is a small unmanned aeri
 </ul>   
 With everything fixed together, the drone look like this:
 <p align="center">
-    <img width="500"  src="media/drone.jpg">
+    <img width="500"  src="media/drone.png">
 </p>
 
 
