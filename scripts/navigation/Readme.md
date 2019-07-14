@@ -14,4 +14,5 @@ Without Localization => [![Watch the video](https://i.ytimg.com/vi/2B_A5JpAlZ0/h
 We use 2D A-star planning to avoid obstacles between check points. Since the path provided by A-star is a bunch of points even they are in a straght line and this will decrease the speed of drone, so we do pruning, in which we delete the points between the start point and end point of a straght line. Also, in some of the situation 2D planning will give a pretty long path but pretty simple to go with 3D planning. But 3D planning will cost more computation. So, we do some height planning. First, do 2D planning and pruning in the map without obstacle. Then check if there are any obastacle between the check points. Add two check points in both side of obstacle and give them a higher height. In addition, in order to get more accurate drone position, the camera should look at the markers as much as possible. So we do yaw planning. Find the closest marker and add the corresponding yaw angle to the check points.   
 
 #### Demo of path planning
+  <img src="media/gifhome_640x480.gif">
 
