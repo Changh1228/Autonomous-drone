@@ -44,13 +44,15 @@ The project was divided in mainly three tasks:
   <li><b>Navigation:</b> Being able to navigate over the 3D track.</li>
 </ul>
 
+<b>Note:</b> The perception task is developed in [Perception](scripts/perception) subfolder while the latter two are developed in [Navigation](scripts/navigation) subfolder. Each of the subfolders contain another <b>README</b> file focusing on each of the parts and the code developed there.   
+If interested, please check these folders for more detailed information and demo.
+
 The block diogram of the system design(including the three tasks) is shown as follows:
 <p align="center">
     <img src="media/block_diagram.png" alt>
 </p>    
 
-<b>Note:</b> The perception task is developed in [Perception](scripts/perception) subfolder while the latter two are developed in [Navigation](scripts/navigation) subfolder. Each of the subfolders contain another <b>README</b> file focusing on each of the parts and the code developed there.   
-<b>If interested, please check these folders for more detailed information and demo.</b>
+
 
 ## Preparations before these code
 Before you running the code from this repo, there are some base code and requirements. Check this <a href="https://kth.instructure.com/courses/8291/pages/linux-installation">page</a> 
